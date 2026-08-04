@@ -1050,7 +1050,7 @@ async function loadFromCloud(){
   }catch(e){
     console.error("cloud load failed", e);
     initEmptyState();
-    setSaveStatus("⚠ erreur chargement : "+(e.message||e));
+    setSaveStatus("⚠ Un problème est survenu. Réessaie plus tard.");
   }
 }
 
@@ -1073,7 +1073,7 @@ function scheduleCloudSave(){
       setSaveStatus("✓ sauvegardé "+t);
     }catch(e){
       console.error("cloud save failed", e);
-      setSaveStatus("⚠ erreur sync : "+(e.message||e));
+      setSaveStatus("⚠ Un problème est survenu. Réessaie plus tard.");
     }
   }, 400);
 }
@@ -1622,7 +1622,8 @@ authResend.onclick = async ()=>{
     }
     setAuthMsg("Nouveau code envoyé à "+pendingEmail, true);
   }catch(e){
-    setAuthMsg("Erreur envoi : "+(e.message||e));
+    console.error("auth error", e);
+    setAuthMsg("Un problème est survenu. Réessaie plus tard.");
   }finally{
     authResend.disabled = false;
   }
@@ -1645,7 +1646,8 @@ authSubmit.onclick = async ()=>{
       authPwdConfirm.value = "";
       updateAuthMode();
     }catch(e){
-      setAuthMsg("Erreur : "+(e.message||e));
+      console.error("auth error", e);
+      setAuthMsg("Un problème est survenu. Réessaie plus tard.");
     }finally{
       authSubmit.disabled = false;
     }
@@ -1668,7 +1670,8 @@ authSubmit.onclick = async ()=>{
       if(updErr) throw updErr;
       // succès : session recovery est active, onAuthStateChange ouvre l'app
     }catch(e){
-      setAuthMsg("Erreur : "+(e.message||e));
+      console.error("auth error", e);
+      setAuthMsg("Un problème est survenu. Réessaie plus tard.");
     }finally{
       authSubmit.disabled = false;
     }
@@ -1684,7 +1687,8 @@ authSubmit.onclick = async ()=>{
       const {error} = await sb.auth.verifyOtp({email:pendingEmail, token, type:"signup"});
       if(error) throw error;
     }catch(e){
-      setAuthMsg("Code invalide ou expiré : "+(e.message||e));
+      console.error("auth error", e);
+      setAuthMsg("Un problème est survenu. Réessaie plus tard.");
     }finally{
       authSubmit.disabled = false;
     }
@@ -1723,7 +1727,8 @@ authSubmit.onclick = async ()=>{
       }
     }
   }catch(e){
-    setAuthMsg("Erreur : "+(e.message||e));
+    console.error("auth error", e);
+    setAuthMsg("Un problème est survenu. Réessaie plus tard.");
   }finally{
     authSubmit.disabled = false;
   }
