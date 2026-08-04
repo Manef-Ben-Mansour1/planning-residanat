@@ -1247,14 +1247,18 @@ document.getElementById("resetBtn").onclick = async ()=>{
   const label = READING_LABELS[currentReading];
   const ok = await openConfirm({
     title:`Réinitialiser la ${label} ?`,
-    message:`Toutes les cases cochées et dates de cette lecture (${label}) seront effacées. Les autres lectures ne sont pas touchées. Cette action est irréversible.`,
+    message:`Toutes les cases cochées, dates et heures de cette lecture (${label}) seront effacées, et les cours associés seront retirés de l'agenda. Les autres lectures ne sont pas touchées. Cette action est irréversible.`,
     okText:`Réinitialiser ${label}`,
     cancelText:"Annuler"
   });
   if(!ok) return;
   const rKey = "r"+currentReading;
   for(const item of all){
-    if(state[item.id]) state[item.id][rKey] = {checked:false, date:""};
+    const s = state[item.id];
+    if(!s) continue;
+    const oldDate = s[rKey].date;
+    if(oldDate) removeCourseFromAgenda(item.t, oldDate);
+    s[rKey] = {checked:false, date:"", hours:""};
     saveItem(item.id);
   }
   render();
@@ -1705,23 +1709,22 @@ function hexToRgba(hex, alpha){
   const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+// Matching strict : uniquement égalité exacte ou alias présent comme mot entier
+// dans le texte (word boundary via espaces). Pas d'inclusion partielle floue.
 function findBestMatch(entryText){
   const normEntry = normalize(entryText);
   if(!normEntry) return null;
   const padded = " "+normEntry+" ";
+  // Passe 1 : égalité exacte avec un alias
   for(const item of all){
     for(const alias of item.aliases){
       if(alias.length>=2 && normEntry === alias) return item;
     }
   }
+  // Passe 2 : alias trouvé comme mot entier dans le texte
   for(const item of all){
     for(const alias of item.aliases){
       if(alias.length>=3 && padded.includes(" "+alias+" ")) return item;
-    }
-  }
-  for(const item of all){
-    for(const alias of item.aliases){
-      if(alias.length>=4 && (normEntry.includes(alias) || (alias.includes(normEntry) && normEntry.length>=4))) return item;
     }
   }
   return null;
