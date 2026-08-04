@@ -999,6 +999,28 @@ function todayISO(){
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+// Affichage utilisateur : jj/mm/aaaa. Interne : yyyy-mm-dd (ISO).
+function toDisplayDate(iso){
+  if(!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+// Parse plusieurs formats saisis : jj/mm/aaaa, jj-mm-aaaa, jjmmaaaa, yyyy-mm-dd.
+// Retourne "" pour vide, null pour format invalide, sinon la date ISO valide.
+function parseUserDate(s){
+  s = (s||"").trim().replace(/\s/g,"");
+  if(!s) return "";
+  let d,mo,y;
+  let m = s.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
+  if(m){ d=m[1]; mo=m[2]; y=m[3]; }
+  else if((m = s.match(/^(\d{2})(\d{2})(\d{4})$/))){ d=m[1]; mo=m[2]; y=m[3]; }
+  else if((m = s.match(/^(\d{4})[\/\-.](\d{2})[\/\-.](\d{2})$/))){ y=m[1]; mo=m[2]; d=m[3]; }
+  else return null;
+  const iso = `${y}-${mo}-${d}`;
+  const dt = new Date(iso+"T00:00:00");
+  if(isNaN(dt.getTime()) || dt.getFullYear() != y || (dt.getMonth()+1) != Number(mo) || dt.getDate() != Number(d)) return null;
+  return iso;
+}
 function parseEntries(text){
   return (text||"").split(/[\n,;\/]+/).map(s=>s.trim()).filter(Boolean);
 }
@@ -1143,30 +1165,30 @@ function syncFromAgendaEdit(dateKey, oldText, newText){
   }
   let changed = false;
 
-  // Ajouts : coche la prochaine lecture non faite + date = dateKey (si vide)
+  // Ajouts : pose UNIQUEMENT la date sur la 1ère lecture dont la date est vide.
+  // Ne coche pas — l'utilisateur cochera lui-même quand il aura vraiment lu.
   for(const id of newSet){
     if(oldSet.has(id)) continue;
     const s = state[id];
-    if(!s) continue;
+    if(!s || !dateKey) continue;
     let target = null;
-    if(!s.r1.checked) target = "r1";
-    else if(!s.r2.checked) target = "r2";
-    else if(!s.r3.checked) target = "r3";
+    if(!s.r1.date) target = "r1";
+    else if(!s.r2.date) target = "r2";
+    else if(!s.r3.date) target = "r3";
     if(!target) continue;
-    s[target].checked = true;
-    if(dateKey && !s[target].date) s[target].date = dateKey;
+    s[target].date = dateKey;
     saveItem(id);
     changed = true;
   }
 
-  // Suppressions : décoche uniquement les lectures dont la date == dateKey
+  // Suppressions : efface UNIQUEMENT la date des lectures dont la date == dateKey.
+  // Ne décoche pas — l'utilisateur décoche lui-même via la case.
   for(const id of oldSet){
     if(newSet.has(id)) continue;
     const s = state[id];
     if(!s) continue;
     for(const rk of ["r1","r2","r3"]){
       if(s[rk].date === dateKey){
-        s[rk].checked = false;
         s[rk].date = "";
       }
     }
@@ -1294,7 +1316,7 @@ function render(){
             <input type="number" class="hours-input" min="0" step="0.5" value="${st.hours||""}" placeholder="0" style="${hoursStyle}" />
             <span class="hours-unit" style="${hoursUnitStyle}">h</span>
           </span>
-          <input type="date" class="date-input" value="${st.date||""}" />
+          <input type="text" class="date-input" value="${toDisplayDate(st.date)}" placeholder="jj/mm/aaaa" maxlength="10" inputmode="numeric" />
         `;
         const chk = row.querySelector(".chk");
         const dateInp = row.querySelector(".date-input");
@@ -1314,12 +1336,18 @@ function render(){
           render();
         };
         dateInp.onchange = ()=>{
+          const iso = parseUserDate(dateInp.value);
+          if(iso === null){
+            // Format invalide : on revient à la valeur précédente
+            dateInp.value = toDisplayDate(state[it.id][rKey].date);
+            return;
+          }
           const oldDate = state[it.id][rKey].date;
-          const newDate = dateInp.value;
-          state[it.id][rKey].date = newDate;
+          state[it.id][rKey].date = iso;
+          dateInp.value = toDisplayDate(iso);
           saveItem(it.id);
-          if(oldDate && oldDate !== newDate) removeCourseFromAgenda(it.t, oldDate);
-          if(newDate) addCourseToAgenda(it.t, newDate);
+          if(oldDate && oldDate !== iso) removeCourseFromAgenda(it.t, oldDate);
+          if(iso) addCourseToAgenda(it.t, iso);
         };
         hoursInp.onchange = ()=>{
           state[it.id][rKey].hours = hoursInp.value;
