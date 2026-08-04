@@ -1,0 +1,9 @@
+# Config locale contenant les clés Supabase — ne jamais commit
+config.js
+
+# OS / éditeur
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
