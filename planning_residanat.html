@@ -977,6 +977,18 @@ function parseEntries(text){
   return (text||"").split(/[\n,;\/]+/).map(s=>s.trim()).filter(Boolean);
 }
 
+// Remplace chaque entrée reconnue par le titre officiel du cours.
+// Les entrées non reconnues sont conservées telles quelles (l'utilisateur
+// peut noter du texte libre à côté).
+function normalizeAgendaText(text){
+  const entries = parseEntries(text);
+  if(entries.length === 0) return "";
+  return entries.map(e=>{
+    const m = findBestMatch(e);
+    return m ? m.t : e;
+  }).join(", ");
+}
+
 // Sync agenda → liste : diff old vs new, ajoute pour les cours nouveaux,
 // décoche pour les cours retirés (uniquement la lecture dont date == dateKey).
 function syncFromAgendaEdit(dateKey, oldText, newText){
@@ -1692,9 +1704,12 @@ function renderCalendar(){
     textarea.addEventListener("blur", ()=>{
       clearTimeout(saveTimeout);
       const oldText = agendaCache[key] || "";
-      setAgendaNote(key, textarea.value);
-      syncFromAgendaEdit(key, oldText, textarea.value);
-      chips.innerHTML = buildChipsHTML(textarea.value, key);
+      // Sur blur : remplace chaque entrée reconnue par le titre officiel du cours
+      const normalized = normalizeAgendaText(textarea.value);
+      textarea.value = normalized;
+      setAgendaNote(key, normalized);
+      syncFromAgendaEdit(key, oldText, normalized);
+      chips.innerHTML = buildChipsHTML(normalized, key);
       cell.classList.remove("editing");
     });
   }
