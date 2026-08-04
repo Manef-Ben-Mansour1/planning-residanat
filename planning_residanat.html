@@ -334,8 +334,11 @@ h1{
     <h2 class="auth-title" id="authTitle">Connexion</h2>
     <input class="auth-field" type="email" id="authEmail" placeholder="email@exemple.com" autocomplete="email" />
     <input class="auth-field" type="password" id="authPwd" placeholder="mot de passe" autocomplete="current-password" />
+    <input class="auth-field hidden" type="password" id="authPwdConfirm" placeholder="confirme le mot de passe" autocomplete="new-password" />
+    <input class="auth-field hidden" type="text" id="authOtp" placeholder="code à 6 chiffres" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
     <button class="auth-btn primary" id="authSubmit">Se connecter</button>
     <button class="auth-btn secondary" id="authToggle">Créer un compte</button>
+    <button class="auth-btn secondary hidden" id="authResend">Renvoyer le code</button>
     <div class="auth-msg" id="authMsg"></div>
   </div>
 </div>
@@ -842,46 +845,110 @@ document.getElementById("resetBtn").onclick = ()=>{
 const authOverlay = document.getElementById("authOverlay");
 const authEmail = document.getElementById("authEmail");
 const authPwd = document.getElementById("authPwd");
+const authPwdConfirm = document.getElementById("authPwdConfirm");
+const authOtp = document.getElementById("authOtp");
 const authSubmit = document.getElementById("authSubmit");
 const authToggle = document.getElementById("authToggle");
+const authResend = document.getElementById("authResend");
 const authMsg = document.getElementById("authMsg");
 const authTitle = document.getElementById("authTitle");
 const userInfo = document.getElementById("userInfo");
 const userEmailEl = document.getElementById("userEmail");
 const signOutBtn = document.getElementById("signOutBtn");
 
-let authMode = "signin"; // ou "signup"
+let authMode = "signin";  // "signin" | "signup" | "verify"
+let pendingEmail = "";
 
 function setAuthMsg(text, ok=false){
   authMsg.textContent = text;
   authMsg.classList.toggle("ok", ok);
 }
 
+function show(el, visible){ el.classList.toggle("hidden", !visible); }
+
 function updateAuthMode(){
-  if(authMode === "signin"){
+  const isSignin = authMode === "signin";
+  const isSignup = authMode === "signup";
+  const isVerify = authMode === "verify";
+
+  show(authEmail, !isVerify);
+  show(authPwd, !isVerify);
+  show(authPwdConfirm, isSignup);
+  show(authOtp, isVerify);
+  show(authToggle, !isVerify);
+  show(authResend, isVerify);
+
+  if(isSignin){
     authTitle.textContent = "Connexion";
     authSubmit.textContent = "Se connecter";
     authToggle.textContent = "Créer un compte";
     authPwd.setAttribute("autocomplete","current-password");
-  } else {
+    setAuthMsg("");
+  } else if(isSignup){
     authTitle.textContent = "Créer un compte";
     authSubmit.textContent = "Créer mon compte";
     authToggle.textContent = "J'ai déjà un compte";
     authPwd.setAttribute("autocomplete","new-password");
+    setAuthMsg("");
+  } else {
+    authTitle.textContent = "Confirmation email";
+    authSubmit.textContent = "Vérifier le code";
+    setAuthMsg("Code envoyé à " + pendingEmail + " (vérifie tes spams).", true);
+    setTimeout(()=> authOtp.focus(), 50);
   }
-  setAuthMsg("");
 }
 
 authToggle.onclick = ()=>{
   authMode = (authMode === "signin") ? "signup" : "signin";
+  authPwdConfirm.value = "";
   updateAuthMode();
 };
 
+authResend.onclick = async ()=>{
+  if(!pendingEmail) return;
+  authResend.disabled = true;
+  try{
+    const {error} = await sb.auth.resend({type:"signup", email:pendingEmail});
+    if(error) throw error;
+    setAuthMsg("Nouveau code envoyé à "+pendingEmail, true);
+  }catch(e){
+    setAuthMsg("Erreur envoi : "+(e.message||e));
+  }finally{
+    authResend.disabled = false;
+  }
+};
+
 authSubmit.onclick = async ()=>{
+  // Mode : vérification du code OTP
+  if(authMode === "verify"){
+    const token = authOtp.value.trim();
+    if(!/^\d{6}$/.test(token)){ setAuthMsg("Entre le code à 6 chiffres reçu par email."); return; }
+    authSubmit.disabled = true;
+    try{
+      const {error} = await sb.auth.verifyOtp({email:pendingEmail, token, type:"signup"});
+      if(error) throw error;
+    }catch(e){
+      setAuthMsg("Code invalide ou expiré : "+(e.message||e));
+    }finally{
+      authSubmit.disabled = false;
+    }
+    return;
+  }
+
+  // Modes : connexion / inscription
   const email = authEmail.value.trim();
   const pwd = authPwd.value;
   if(!email || !pwd){ setAuthMsg("Email et mot de passe requis."); return; }
   if(pwd.length < 6){ setAuthMsg("Mot de passe : 6 caractères minimum."); return; }
+
+  if(authMode === "signup"){
+    const pwdConfirm = authPwdConfirm.value;
+    if(pwd !== pwdConfirm){
+      setAuthMsg("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+  }
+
   authSubmit.disabled = true;
   try{
     if(authMode === "signin"){
@@ -891,8 +958,10 @@ authSubmit.onclick = async ()=>{
       const {data, error} = await sb.auth.signUp({email, password:pwd});
       if(error) throw error;
       if(!data.session){
-        setAuthMsg("Compte créé. Vérifie tes mails pour confirmer, puis reconnecte-toi.", true);
-        authMode = "signin"; updateAuthMode();
+        pendingEmail = email;
+        authMode = "verify";
+        authOtp.value = "";
+        updateAuthMode();
         return;
       }
     }
@@ -904,7 +973,7 @@ authSubmit.onclick = async ()=>{
 };
 
 // Enter valide le formulaire
-[authEmail, authPwd].forEach(inp=> inp.addEventListener("keydown", e=>{
+[authEmail, authPwd, authPwdConfirm, authOtp].forEach(inp=> inp.addEventListener("keydown", e=>{
   if(e.key === "Enter") authSubmit.click();
 }));
 
@@ -929,7 +998,11 @@ function onSignedOut(){
   userInfo.classList.add("hidden");
   authOverlay.classList.remove("hidden");
   authPwd.value = "";
-  setAuthMsg("");
+  authPwdConfirm.value = "";
+  authOtp.value = "";
+  pendingEmail = "";
+  if(authMode === "verify") authMode = "signin";
+  updateAuthMode();
   setSaveStatus("");
 }
 
