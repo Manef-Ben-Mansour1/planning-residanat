@@ -97,6 +97,29 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
 .auth-link:hover{color:var(--teal); text-decoration:underline;}
 .hidden{display:none !important;}
 
+/* ---- Suggestions agenda ---- */
+.suggest-box{
+  position:fixed; z-index:150;
+  background:var(--paper-raised);
+  border:1px solid var(--line); border-radius:8px;
+  box-shadow:0 6px 20px rgba(0,0,0,0.12);
+  max-height:260px; overflow-y:auto;
+  min-width:220px;
+}
+.suggest-item{
+  padding:8px 12px; cursor:pointer;
+  border-left:3px solid transparent;
+  font-size:0.85rem; line-height:1.25;
+  border-bottom:1px solid var(--paper);
+}
+.suggest-item:last-child{border-bottom:none;}
+.suggest-item:hover, .suggest-item.active{background:var(--paper);}
+.suggest-item-spec{
+  font-family:'JetBrains Mono',monospace; font-size:0.65rem;
+  color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em;
+  margin-top:2px;
+}
+
 /* ---- Modal générique ---- */
 .modal-backdrop{
   position:fixed; inset:0; z-index:200;
@@ -476,6 +499,9 @@ h1{
     <div class="auth-msg" id="authMsg"></div>
   </div>
 </div>
+
+<!-- ---------- Suggestions de cours pour l'agenda ---------- -->
+<div class="suggest-box hidden" id="suggestBox"></div>
 
 <!-- ---------- Modal de confirmation générique ---------- -->
 <div class="modal-backdrop hidden" id="confirmModal">
@@ -976,6 +1002,119 @@ function todayISO(){
 function parseEntries(text){
   return (text||"").split(/[\n,;\/]+/).map(s=>s.trim()).filter(Boolean);
 }
+
+/* ---------------- Suggestions de cours ---------------- */
+const suggestBox = document.getElementById("suggestBox");
+let suggestState = {items:[], active:-1, textarea:null, wordStart:0};
+
+function hideSuggest(){
+  suggestBox.classList.add("hidden");
+  suggestState = {items:[], active:-1, textarea:null, wordStart:0};
+}
+
+// Retourne le fragment en cours de saisie (du dernier séparateur au curseur)
+function currentFragment(textarea){
+  const val = textarea.value;
+  const pos = textarea.selectionStart;
+  const before = val.slice(0, pos);
+  const m = before.match(/[^,;\/\n]*$/);
+  const raw = m ? m[0] : "";
+  const trimmed = raw.trimStart();
+  const wordStart = pos - trimmed.length;
+  return {trimmed, wordStart, cursorPos: pos};
+}
+
+function showSuggestions(textarea){
+  const {trimmed, wordStart, cursorPos} = currentFragment(textarea);
+  if(trimmed.length < 3){ hideSuggest(); return; }
+  const norm = normalize(trimmed);
+  if(!norm){ hideSuggest(); return; }
+
+  // Cherche les cours dont un alias contient le fragment (matching souple UNIQUEMENT
+  // pour l'aide à la saisie ; la sync sur le texte reste stricte via findBestMatch)
+  const seen = new Set();
+  const items = [];
+  for(const item of all){
+    if(seen.has(item.id)) continue;
+    for(const alias of item.aliases){
+      if(alias.length >= 2 && alias.includes(norm)){
+        items.push(item); seen.add(item.id); break;
+      }
+    }
+  }
+  if(items.length === 0){ hideSuggest(); return; }
+
+  const shown = items.slice(0, 8);
+  suggestState = {items:shown, active:0, textarea, wordStart, cursorPos};
+
+  const rect = textarea.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const preferAbove = spaceBelow < 200 && rect.top > 260;
+  suggestBox.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 240)) + "px";
+  if(preferAbove){
+    suggestBox.style.top = (rect.top - 4 - Math.min(260, shown.length*44)) + "px";
+  } else {
+    suggestBox.style.top = (rect.bottom + 4) + "px";
+  }
+  suggestBox.style.width = Math.max(rect.width, 220) + "px";
+
+  suggestBox.innerHTML = shown.map((it, i)=>{
+    const color = specColor(it.specIdx);
+    return `<div class="suggest-item ${i===0?'active':''}" data-idx="${i}" style="border-left-color:${color}">
+      <div style="color:${color};font-weight:600;">${escapeHtml(it.t)}</div>
+      <div class="suggest-item-spec">${escapeHtml(it.spec)}</div>
+    </div>`;
+  }).join('');
+  suggestBox.classList.remove("hidden");
+
+  suggestBox.querySelectorAll(".suggest-item").forEach(el=>{
+    el.addEventListener("mousedown", (e)=>{
+      e.preventDefault(); // évite le blur de la textarea
+      insertSuggestion(parseInt(el.dataset.idx, 10));
+    });
+  });
+}
+
+function insertSuggestion(idx){
+  const {items, textarea, wordStart, cursorPos} = suggestState;
+  if(!textarea || idx < 0 || idx >= items.length) return;
+  const item = items[idx];
+  const val = textarea.value;
+  const newText = val.slice(0, wordStart) + item.t + val.slice(cursorPos);
+  textarea.value = newText;
+  const nc = wordStart + item.t.length;
+  textarea.setSelectionRange(nc, nc);
+  textarea.focus();
+  hideSuggest();
+  // déclenche l'input event pour la sync débouncée
+  textarea.dispatchEvent(new Event("input"));
+}
+
+function updateSuggestActive(){
+  suggestBox.querySelectorAll(".suggest-item").forEach((el, i)=>{
+    el.classList.toggle("active", i === suggestState.active);
+    if(i === suggestState.active) el.scrollIntoView({block:"nearest"});
+  });
+}
+
+document.addEventListener("keydown", (e)=>{
+  if(suggestBox.classList.contains("hidden")) return;
+  if(e.key === "ArrowDown"){
+    e.preventDefault();
+    suggestState.active = (suggestState.active + 1) % suggestState.items.length;
+    updateSuggestActive();
+  } else if(e.key === "ArrowUp"){
+    e.preventDefault();
+    suggestState.active = (suggestState.active - 1 + suggestState.items.length) % suggestState.items.length;
+    updateSuggestActive();
+  } else if((e.key === "Enter" || e.key === "Tab") && suggestState.active >= 0){
+    e.preventDefault();
+    insertSuggestion(suggestState.active);
+  } else if(e.key === "Escape"){
+    e.preventDefault();
+    hideSuggest();
+  }
+});
 
 // Remplace chaque entrée reconnue par le titre officiel du cours.
 // Les entrées non reconnues sont conservées telles quelles (l'utilisateur
@@ -1693,6 +1832,7 @@ function renderCalendar(){
 
     let saveTimeout;
     textarea.addEventListener("input", ()=>{
+      showSuggestions(textarea);
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(()=>{
         const oldText = agendaCache[key] || "";
@@ -1700,11 +1840,15 @@ function renderCalendar(){
         syncFromAgendaEdit(key, oldText, textarea.value);
       }, 400);
     });
+    textarea.addEventListener("keyup", (e)=>{
+      // Rafraîchit les suggestions quand on déplace le curseur (flèches, click)
+      if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)) showSuggestions(textarea);
+    });
     textarea.addEventListener("focus", ()=> cell.classList.add("editing"));
     textarea.addEventListener("blur", ()=>{
       clearTimeout(saveTimeout);
+      hideSuggest();
       const oldText = agendaCache[key] || "";
-      // Sur blur : remplace chaque entrée reconnue par le titre officiel du cours
       const normalized = normalizeAgendaText(textarea.value);
       textarea.value = normalized;
       setAgendaNote(key, normalized);
