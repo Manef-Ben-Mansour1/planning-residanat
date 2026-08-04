@@ -385,6 +385,7 @@ h1{
   width:100%; padding:5px 22px 5px 8px; border:1px solid var(--line); border-radius:6px;
   background:var(--paper); color:var(--ink); text-align:right;
   -moz-appearance:textfield;
+  appearance:textfield;
 }
 .hours-input::-webkit-outer-spin-button,
 .hours-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
@@ -407,10 +408,53 @@ h1{
 
 @media (max-width:760px){
   .tabs{display:none;}
-  .main{padding:24px 16px 60px;}
-  .course-row{grid-template-columns:22px 30px 1fr 60px; row-gap:6px;}
-  .pages-chip,.hours-wrap{display:none;}
-  .date-input{grid-column:1 / -1; margin-left:0; width:100%;}
+  .main{padding:20px 14px 60px;}
+
+  /* Bandeau haut : titre sur sa ligne, boutons compacts, user info en bas */
+  .view-switch{flex-wrap:wrap; padding:10px 12px 8px; gap:6px;}
+  .view-switch-title{font-size:0.9rem; width:100%; margin:0 0 4px;}
+  .view-btn{font-size:0.7rem; padding:6px 10px; border-radius:16px;}
+  .user-info{
+    width:100%; order:99; font-size:0.7rem;
+    padding-top:6px; border-top:1px solid var(--line); margin-top:4px;
+    justify-content:space-between;
+  }
+
+  h1{font-size:1.6rem;}
+  .subtitle{font-size:0.88rem;}
+  .section-title{font-size:1.1rem;}
+
+  /* Dossier stats : 3 cartes empilées, plus grandes lisibles */
+  .dossier{gap:10px; margin:16px 0 22px;}
+  .dossier-block{flex:1 1 100%; padding:14px 16px; gap:14px;}
+  .stat-line strong{font-size:1rem; min-width:60px;}
+  .stat-line em{font-size:0.72rem;}
+
+  /* Sépa Jour 1 / Jour 2 plus compact */
+  .day-header{padding:7px 10px; margin:22px 0 10px;}
+  .day-label{font-size:0.72rem;}
+  .day-meta{font-size:0.65rem;}
+
+  /* Ligne de cours : plus grande, touch targets accessibles */
+  .course-row{
+    grid-template-columns:30px 36px 1fr 68px;
+    row-gap:8px;
+    padding:12px 4px;
+    font-size:0.95rem;
+    gap:10px;
+  }
+  .chk{width:22px; height:22px;}
+  .course-title{font-size:0.92rem; line-height:1.3;}
+  .code{font-size:0.75rem;}
+  .pages-chip{display:none;}
+  .hours-wrap{display:block;}
+  .hours-input{padding:8px 22px 8px 8px; font-size:0.85rem;}
+  .date-input{
+    grid-column:1 / -1;
+    margin-left:30px;
+    width:calc(100% - 30px);
+    padding:8px 10px; font-size:0.88rem;
+  }
 }
 </style>
 </head>
