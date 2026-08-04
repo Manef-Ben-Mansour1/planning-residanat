@@ -1084,6 +1084,8 @@ function render(){
           <span class="section-meta">${doneCount}/${items.length} · ${totalPages} pages</span>
         </div>
       `;
+      const hoursStyle = `border-color:${color};color:${color};background:${hexToRgba(color,0.08)};`;
+      const hoursUnitStyle = `color:${color};`;
       items.forEach(it=>{
         const st = readState(it.id);
         const row = document.createElement("div");
@@ -1094,8 +1096,8 @@ function render(){
           <span class="course-title">${it.t}</span>
           <span class="pages-chip">${it.p} p.</span>
           <span class="hours-wrap">
-            <input type="number" class="hours-input" min="0" step="0.5" value="${st.hours||""}" placeholder="0" />
-            <span class="hours-unit">h</span>
+            <input type="number" class="hours-input" min="0" step="0.5" value="${st.hours||""}" placeholder="0" style="${hoursStyle}" />
+            <span class="hours-unit" style="${hoursUnitStyle}">h</span>
           </span>
           <input type="date" class="date-input" value="${st.date||""}" />
         `;
