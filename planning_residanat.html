@@ -280,6 +280,48 @@ h1{
 .dossier{
   background:var(--paper-raised); border:1px solid var(--line); border-radius:10px;
   padding:18px 22px; margin:22px 0 30px; display:flex; align-items:center; gap:22px;
+  flex-wrap:wrap;
+}
+.stat-group{
+  display:flex; flex-direction:column; gap:5px;
+  padding-left:18px; border-left:1px solid var(--line); min-width:140px;
+}
+.stat-group:first-of-type{padding-left:0; border-left:none;}
+.stat-group-label{
+  font-family:'JetBrains Mono',monospace; font-size:0.68rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--teal);
+  margin-bottom:2px; font-weight:600;
+}
+.stat-line{
+  display:flex; align-items:baseline; gap:8px;
+}
+.stat-line strong{
+  font-family:'JetBrains Mono',monospace; font-weight:600; font-size:0.95rem;
+  color:var(--ink); min-width:52px;
+}
+.stat-line em{
+  font-style:normal; font-size:0.7rem; color:var(--ink-soft);
+  text-transform:uppercase; letter-spacing:.05em;
+}
+
+.day-header{
+  display:flex; align-items:baseline; justify-content:space-between;
+  margin:34px 0 14px; padding:8px 12px;
+  background:var(--ink); color:#fff; border-radius:6px;
+}
+.day-header:first-child{margin-top:0;}
+.day-label{
+  font-family:'JetBrains Mono',monospace; font-weight:600; font-size:0.8rem;
+  letter-spacing:.12em; text-transform:uppercase;
+}
+.day-meta{
+  font-family:'JetBrains Mono',monospace; font-size:0.72rem; opacity:0.75;
+}
+
+.tabs-group-label{
+  font-family:'JetBrains Mono',monospace; font-size:0.68rem;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--teal);
+  padding:14px 20px 4px; font-weight:600;
 }
 .dossier-ring{position:relative; width:64px; height:64px; flex:0 0 64px;}
 .dossier-ring svg{transform:rotate(-90deg);}
@@ -421,10 +463,23 @@ h1{
         </svg>
         <div class="dossier-ring-label" id="ringLabel">0%</div>
       </div>
-      <div class="dossier-stats">
-        <div><div class="stat-num" id="statDone">0/0</div><div class="stat-label">Cours faits</div></div>
-        <div><div class="stat-num" id="statPages">0</div><div class="stat-label">Pages restantes</div></div>
-        <div><div class="stat-num" id="statSpecs">0/0</div><div class="stat-label">Spécialités acquises</div></div>
+      <div class="stat-group">
+        <div class="stat-group-label">Total</div>
+        <div class="stat-line"><strong id="statDone">0/0</strong><em>cours faits</em></div>
+        <div class="stat-line"><strong id="statPages">0</strong><em>pages restantes</em></div>
+        <div class="stat-line"><strong id="statSpecs">0/0</strong><em>spécialités</em></div>
+      </div>
+      <div class="stat-group">
+        <div class="stat-group-label">Jour 1</div>
+        <div class="stat-line"><strong id="statDoneJ1">0/0</strong><em>cours faits</em></div>
+        <div class="stat-line"><strong id="statPagesJ1">0</strong><em>pages restantes</em></div>
+        <div class="stat-line"><strong id="statSpecsJ1">0/0</strong><em>spécialités</em></div>
+      </div>
+      <div class="stat-group">
+        <div class="stat-group-label">Jour 2</div>
+        <div class="stat-line"><strong id="statDoneJ2">0/0</strong><em>cours faits</em></div>
+        <div class="stat-line"><strong id="statPagesJ2">0</strong><em>pages restantes</em></div>
+        <div class="stat-line"><strong id="statSpecsJ2">0/0</strong><em>spécialités</em></div>
       </div>
     </div>
 
@@ -592,6 +647,43 @@ const SPEC_COLORS = [
   "#C0392B", // Cardiologie
 ];
 function specColor(si){ return SPEC_COLORS[si % SPEC_COLORS.length]; }
+
+// ---- Répartition officielle des spécialités par jour d'examen ----
+const DAY_ORDER = [
+  {day:"J1", label:"Jour 1", specs:[
+    "Neurologie",
+    "Psychiatrie",
+    "Chirurgie Générale",
+    "Gastro-Entérologie",
+    "Cardiologie",
+    "Pneumologie",
+    "Gynécologie",
+    "Ophtalmologie",
+    "O.R.L",
+  ]},
+  {day:"J2", label:"Jour 2", specs:[
+    "Hématologie",
+    "Infectieux",
+    "Urologie",
+    "Néphrologie",
+    "Réanimation médicale, chirurgie et médecine d'urgence",
+    "Orthopédie",
+    "Pédiatrie",
+    "Endocrinologie",
+  ]},
+];
+// Renvoie la liste des sections DATA regroupées par jour, avec leur index d'origine
+function sectionsByDay(){
+  return DAY_ORDER.map(group=>({
+    ...group,
+    sections: group.specs
+      .map(name => {
+        const si = DATA.findIndex(s => s.spec === name);
+        return si >= 0 ? {sec:DATA[si], si} : null;
+      })
+      .filter(Boolean)
+  }));
+}
 
 // ---- Normalisation texte (accents, casse) ----
 function stripAccents(str){ return str.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
@@ -904,86 +996,123 @@ function render(){
   tabsEl.innerHTML = `<div class="tabs-title">Spécialités</div>`;
   sectionsEl.innerHTML = "";
 
-  let totalDone=0, totalItems=all.length, totalPagesLeft=0, specsComplete=0;
+  const totals = {done:0, items:all.length, pagesLeft:0, specsComplete:0};
+  const dayStats = {J1:{done:0, items:0, pagesLeft:0, specsComplete:0, totalSpecs:0},
+                    J2:{done:0, items:0, pagesLeft:0, specsComplete:0, totalSpecs:0}};
+  const rKey = "r"+currentReading;
 
-  DATA.forEach((sec,si)=>{
-    let items = sec.items.map((it,ii)=>({...it, id:`${si}-${ii}`}));
-    if(currentSort==="priority"){
-      items = [...items].sort((a,b)=> (b.p*b.k) - (a.p*a.k));
-    }
-    const doneCount = items.filter(it=>readState(it.id).checked).length;
-    const isComplete = doneCount===items.length;
-    if(isComplete) specsComplete++;
-    totalDone += doneCount;
-    items.forEach(it=>{ if(!readState(it.id).checked) totalPagesLeft += it.p; });
+  const groups = sectionsByDay();
 
-    // tab
-    const color = specColor(si);
-    const tab = document.createElement("div");
-    tab.className = "tab-item"+(isComplete?" done":"");
-    tab.innerHTML = `<span>${sec.spec}</span><span class="tab-dot" style="background:${color}"></span>`;
-    tab.onclick = ()=> document.getElementById("sec-"+si).scrollIntoView({behavior:"smooth", block:"start"});
-    tabsEl.appendChild(tab);
+  groups.forEach(group=>{
+    dayStats[group.day].totalSpecs = group.sections.length;
 
-    // section
-    const section = document.createElement("div");
-    section.className = "section"+(isComplete?" complete":"");
-    section.id = "sec-"+si;
-    section.style.borderLeft = `5px solid ${color}`;
-    section.style.paddingLeft = "16px";
-    const totalPages = items.reduce((s,it)=>s+it.p,0);
-    section.innerHTML = `
-      <div class="section-head">
-        <span class="section-title">${sec.spec}<span class="stamp">✓ Acquis</span></span>
-        <span class="section-meta">${doneCount}/${items.length} · ${totalPages} pages</span>
-      </div>
-    `;
-    const rKey = "r"+currentReading;
-    items.forEach(it=>{
-      const st = readState(it.id);
-      const row = document.createElement("div");
-      row.className = "course-row"+(st.checked?" checked":"");
-      row.innerHTML = `
-        <input type="checkbox" class="chk" ${st.checked?"checked":""} />
-        <span class="code">${it.c}</span>
-        <span class="course-title">${it.t}</span>
-        <span class="pages-chip">${it.p} p.</span>
-        <span class="coef-chip ${coefClass(it.k)}">${it.k}</span>
-        <input type="date" class="date-input" value="${st.date||""}" />
+    // séparateur de jour en haut du groupe (dans la liste + dans les tabs)
+    const daySepList = document.createElement("div");
+    daySepList.className = "day-header";
+    daySepList.id = "day-"+group.day;
+    const dayItemsCount = group.sections.reduce((n,{sec})=> n+sec.items.length, 0);
+    daySepList.innerHTML = `<span class="day-label">${group.label} — ${group.day}</span><span class="day-meta">${group.sections.length} spécialités · ${dayItemsCount} cours</span>`;
+    sectionsEl.appendChild(daySepList);
+
+    const tabsGroup = document.createElement("div");
+    tabsGroup.className = "tabs-group-label";
+    tabsGroup.textContent = group.day;
+    tabsEl.appendChild(tabsGroup);
+
+    group.sections.forEach(({sec, si})=>{
+      let items = sec.items.map((it,ii)=>({...it, id:`${si}-${ii}`}));
+      if(currentSort==="priority"){
+        items = [...items].sort((a,b)=> (b.p*b.k) - (a.p*a.k));
+      }
+      const doneCount = items.filter(it=>readState(it.id).checked).length;
+      const pagesLeftHere = items.reduce((n,it)=> n + (readState(it.id).checked ? 0 : it.p), 0);
+      const isComplete = doneCount===items.length;
+
+      totals.done += doneCount;
+      totals.pagesLeft += pagesLeftHere;
+      if(isComplete) totals.specsComplete++;
+
+      dayStats[group.day].done += doneCount;
+      dayStats[group.day].items += items.length;
+      dayStats[group.day].pagesLeft += pagesLeftHere;
+      if(isComplete) dayStats[group.day].specsComplete++;
+
+      // tab
+      const color = specColor(si);
+      const tab = document.createElement("div");
+      tab.className = "tab-item"+(isComplete?" done":"");
+      tab.innerHTML = `<span>${sec.spec}</span><span class="tab-dot" style="background:${color}"></span>`;
+      tab.onclick = ()=> document.getElementById("sec-"+si).scrollIntoView({behavior:"smooth", block:"start"});
+      tabsEl.appendChild(tab);
+
+      // section
+      const section = document.createElement("div");
+      section.className = "section"+(isComplete?" complete":"");
+      section.id = "sec-"+si;
+      section.style.borderLeft = `5px solid ${color}`;
+      section.style.paddingLeft = "16px";
+      const totalPages = items.reduce((s,it)=>s+it.p,0);
+      section.innerHTML = `
+        <div class="section-head">
+          <span class="section-title">${sec.spec}<span class="stamp">✓ Acquis</span></span>
+          <span class="section-meta">${doneCount}/${items.length} · ${totalPages} pages</span>
+        </div>
       `;
-      const chk = row.querySelector(".chk");
-      const dateInp = row.querySelector(".date-input");
-      chk.onchange = ()=>{
-        const wasDate = state[it.id][rKey].date;
-        state[it.id][rKey].checked = chk.checked;
-        if(chk.checked){
-          if(!state[it.id][rKey].date) state[it.id][rKey].date = todayISO();
-          addCourseToAgenda(it.t, state[it.id][rKey].date);
-        } else {
-          if(wasDate) removeCourseFromAgenda(it.t, wasDate);
-          state[it.id][rKey].date = "";
-        }
-        row.classList.toggle("checked", chk.checked);
-        saveItem(it.id);
-        render();
-      };
-      dateInp.onchange = ()=>{
-        const oldDate = state[it.id][rKey].date;
-        const newDate = dateInp.value;
-        state[it.id][rKey].date = newDate;
-        saveItem(it.id);
-        if(oldDate && oldDate !== newDate) removeCourseFromAgenda(it.t, oldDate);
-        if(newDate) addCourseToAgenda(it.t, newDate);
-      };
-      section.appendChild(row);
+      items.forEach(it=>{
+        const st = readState(it.id);
+        const row = document.createElement("div");
+        row.className = "course-row"+(st.checked?" checked":"");
+        row.innerHTML = `
+          <input type="checkbox" class="chk" ${st.checked?"checked":""} />
+          <span class="code">${it.c}</span>
+          <span class="course-title">${it.t}</span>
+          <span class="pages-chip">${it.p} p.</span>
+          <span class="coef-chip ${coefClass(it.k)}">${it.k}</span>
+          <input type="date" class="date-input" value="${st.date||""}" />
+        `;
+        const chk = row.querySelector(".chk");
+        const dateInp = row.querySelector(".date-input");
+        chk.onchange = ()=>{
+          const wasDate = state[it.id][rKey].date;
+          state[it.id][rKey].checked = chk.checked;
+          if(chk.checked){
+            if(!state[it.id][rKey].date) state[it.id][rKey].date = todayISO();
+            addCourseToAgenda(it.t, state[it.id][rKey].date);
+          } else {
+            if(wasDate) removeCourseFromAgenda(it.t, wasDate);
+            state[it.id][rKey].date = "";
+          }
+          row.classList.toggle("checked", chk.checked);
+          saveItem(it.id);
+          render();
+        };
+        dateInp.onchange = ()=>{
+          const oldDate = state[it.id][rKey].date;
+          const newDate = dateInp.value;
+          state[it.id][rKey].date = newDate;
+          saveItem(it.id);
+          if(oldDate && oldDate !== newDate) removeCourseFromAgenda(it.t, oldDate);
+          if(newDate) addCourseToAgenda(it.t, newDate);
+        };
+        section.appendChild(row);
+      });
+      sectionsEl.appendChild(section);
     });
-    sectionsEl.appendChild(section);
   });
 
-  document.getElementById("statDone").textContent = `${totalDone}/${totalItems}`;
-  document.getElementById("statPages").textContent = totalPagesLeft;
-  document.getElementById("statSpecs").textContent = `${specsComplete}/${DATA.length}`;
-  const pct = Math.round((totalDone/totalItems)*100);
+  // ---- Stats ----
+  const set = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+  set("statDone",  `${totals.done}/${totals.items}`);
+  set("statPages", totals.pagesLeft);
+  set("statSpecs", `${totals.specsComplete}/${DATA.length}`);
+  set("statDoneJ1",  `${dayStats.J1.done}/${dayStats.J1.items}`);
+  set("statPagesJ1", dayStats.J1.pagesLeft);
+  set("statSpecsJ1", `${dayStats.J1.specsComplete}/${dayStats.J1.totalSpecs}`);
+  set("statDoneJ2",  `${dayStats.J2.done}/${dayStats.J2.items}`);
+  set("statPagesJ2", dayStats.J2.pagesLeft);
+  set("statSpecsJ2", `${dayStats.J2.specsComplete}/${dayStats.J2.totalSpecs}`);
+
+  const pct = totals.items ? Math.round((totals.done/totals.items)*100) : 0;
   document.getElementById("ringLabel").textContent = pct+"%";
   const ring = document.getElementById("ringFill");
   const circumference = 2*Math.PI*27;
