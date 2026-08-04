@@ -393,7 +393,9 @@ h1{
 
 <div class="view-switch">
   <span class="view-switch-title">Carnet de révision — Résidanat</span>
-  <button class="view-btn active" id="btnViewChecklist">📋 Suivi des cours</button>
+  <button class="view-btn active" data-reading="1" id="btnR1">📖 1ère lecture</button>
+  <button class="view-btn" data-reading="2" id="btnR2">📖 2ème lecture</button>
+  <button class="view-btn" data-reading="3" id="btnR3">📖 3ème lecture</button>
   <button class="view-btn" id="btnViewAgenda">🗓️ Agenda</button>
   <span class="user-info hidden" id="userInfo">
     <span id="userEmail"></span>
@@ -406,7 +408,7 @@ h1{
   <nav class="tabs" id="tabs"></nav>
   <main class="main">
     <div class="header">
-      <div class="eyebrow">Concours de Résidanat</div>
+      <div class="eyebrow" id="readingEyebrow">1ère lecture</div>
       <h1>Carnet de révision</h1>
       <p class="subtitle">Coche chaque cours au fur et à mesure, et renseigne toi-même la date de révision prévue.</p>
     </div>
@@ -696,13 +698,43 @@ function setSaveStatus(msg){
   if(el) el.textContent = msg;
 }
 
-// État par défaut : toutes les cases décochées
+let currentReading = 1; // 1, 2 ou 3
+
+// État par défaut : aucune lecture faite
 function initEmptyState(){
   state = {};
   agendaCache = {};
   for(const item of all){
-    state[item.id] = {checked:false, date:""};
+    state[item.id] = {
+      r1:{checked:false, date:""},
+      r2:{checked:false, date:""},
+      r3:{checked:false, date:""}
+    };
   }
+}
+
+// Migre l'ancien format {checked, date} → {r1:{...}, r2:{...}, r3:{...}}
+// Les données existantes deviennent la 1ère lecture, les autres restent vides.
+function normalizeItem(raw){
+  const empty = {checked:false, date:""};
+  if(!raw) return {r1:{...empty}, r2:{...empty}, r3:{...empty}};
+  if("checked" in raw && !("r1" in raw)){
+    return {
+      r1:{checked:!!raw.checked, date:raw.date||""},
+      r2:{...empty},
+      r3:{...empty}
+    };
+  }
+  return {
+    r1:raw.r1 ? {checked:!!raw.r1.checked, date:raw.r1.date||""} : {...empty},
+    r2:raw.r2 ? {checked:!!raw.r2.checked, date:raw.r2.date||""} : {...empty},
+    r3:raw.r3 ? {checked:!!raw.r3.checked, date:raw.r3.date||""} : {...empty}
+  };
+}
+
+// Raccourci : lit l'entrée de la lecture en cours pour un item
+function readState(id){
+  return state[id]?.["r"+currentReading] || {checked:false, date:""};
 }
 
 // --- Chargement du snapshot depuis Supabase pour l'utilisateur connecté ---
@@ -718,7 +750,7 @@ async function loadFromCloud(){
       const snap = data.data;
       if(snap.progress){
         for(const id in snap.progress){
-          if(state[id]) state[id] = snap.progress[id];
+          if(state[id]) state[id] = normalizeItem(snap.progress[id]);
         }
       }
       if(snap.agenda){
@@ -768,11 +800,19 @@ function autoCheckFromText(text){
   const blob = " " + normalize(text) + " ";
   let changed = false;
   for(const item of all){
-    if(state[item.id]?.checked) continue;
+    const s = state[item.id];
+    if(!s) continue;
+    // Détermine la prochaine lecture à cocher automatiquement (1 → 2 → 3)
+    let target = null;
+    if(!s.r1.checked) target = "r1";
+    else if(!s.r2.checked) target = "r2";
+    else if(!s.r3.checked) target = "r3";
+    if(!target) continue;
+
     for(const alias of item.aliases){
       if(alias.length < 2) continue;
       if(blob.includes(" "+alias+" ")){
-        state[item.id].checked = true;
+        s[target].checked = true;
         saveItem(item.id);
         changed = true;
         break;
@@ -804,11 +844,11 @@ function render(){
     if(currentSort==="priority"){
       items = [...items].sort((a,b)=> (b.p*b.k) - (a.p*a.k));
     }
-    const doneCount = items.filter(it=>state[it.id]?.checked).length;
+    const doneCount = items.filter(it=>readState(it.id).checked).length;
     const isComplete = doneCount===items.length;
     if(isComplete) specsComplete++;
     totalDone += doneCount;
-    items.forEach(it=>{ if(!state[it.id]?.checked) totalPagesLeft += it.p; });
+    items.forEach(it=>{ if(!readState(it.id).checked) totalPagesLeft += it.p; });
 
     // tab
     const color = specColor(si);
@@ -831,8 +871,9 @@ function render(){
         <span class="section-meta">${doneCount}/${items.length} · ${totalPages} pages</span>
       </div>
     `;
+    const rKey = "r"+currentReading;
     items.forEach(it=>{
-      const st = state[it.id] || {checked:false, date:""};
+      const st = readState(it.id);
       const row = document.createElement("div");
       row.className = "course-row"+(st.checked?" checked":"");
       row.innerHTML = `
@@ -846,13 +887,13 @@ function render(){
       const chk = row.querySelector(".chk");
       const dateInp = row.querySelector(".date-input");
       chk.onchange = ()=>{
-        state[it.id].checked = chk.checked;
+        state[it.id][rKey].checked = chk.checked;
         row.classList.toggle("checked", chk.checked);
         saveItem(it.id);
         render();
       };
       dateInp.onchange = ()=>{
-        state[it.id].date = dateInp.value;
+        state[it.id][rKey].date = dateInp.value;
         saveItem(it.id);
       };
       section.appendChild(row);
@@ -916,15 +957,17 @@ function openConfirm({title="Confirmer", message="", okText="Confirmer", cancelT
 }
 
 document.getElementById("resetBtn").onclick = async ()=>{
+  const label = READING_LABELS[currentReading];
   const ok = await openConfirm({
-    title:"Réinitialiser ta progression ?",
-    message:"Toutes tes cases cochées et dates de révision seront effacées. Cette action est irréversible.",
-    okText:"Tout réinitialiser",
+    title:`Réinitialiser la ${label} ?`,
+    message:`Toutes les cases cochées et dates de cette lecture (${label}) seront effacées. Les autres lectures ne sont pas touchées. Cette action est irréversible.`,
+    okText:`Réinitialiser ${label}`,
     cancelText:"Annuler"
   });
   if(!ok) return;
+  const rKey = "r"+currentReading;
   for(const item of all){
-    state[item.id] = {checked:false, date:""};
+    if(state[item.id]) state[item.id][rKey] = {checked:false, date:""};
     saveItem(item.id);
   }
   render();
@@ -1204,20 +1247,30 @@ sb.auth.onAuthStateChange((event, session)=>{
 });
 
 /* ---------------- View switching ---------------- */
-const btnViewChecklist = document.getElementById("btnViewChecklist");
+const readingBtns = [document.getElementById("btnR1"), document.getElementById("btnR2"), document.getElementById("btnR3")];
 const btnViewAgenda = document.getElementById("btnViewAgenda");
 const viewChecklist = document.getElementById("viewChecklist");
 const viewAgenda = document.getElementById("viewAgenda");
+const readingEyebrow = document.getElementById("readingEyebrow");
+const READING_LABELS = {1:"1ère lecture", 2:"2ème lecture", 3:"3ème lecture"};
 
-btnViewChecklist.onclick = ()=>{
-  btnViewChecklist.classList.add("active");
+function switchToReading(n){
+  currentReading = n;
+  readingBtns.forEach(b=> b.classList.toggle("active", parseInt(b.dataset.reading,10) === n));
   btnViewAgenda.classList.remove("active");
   viewChecklist.classList.add("active");
   viewAgenda.classList.remove("active");
-};
+  if(readingEyebrow) readingEyebrow.textContent = READING_LABELS[n];
+  render();
+}
+
+readingBtns.forEach(b=>{
+  b.onclick = ()=> switchToReading(parseInt(b.dataset.reading,10));
+});
+
 btnViewAgenda.onclick = ()=>{
   btnViewAgenda.classList.add("active");
-  btnViewChecklist.classList.remove("active");
+  readingBtns.forEach(b=> b.classList.remove("active"));
   viewAgenda.classList.add("active");
   viewChecklist.classList.remove("active");
   renderCalendar();
