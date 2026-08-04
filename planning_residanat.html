@@ -282,11 +282,14 @@ h1{
   padding:18px 22px; margin:22px 0 30px; display:flex; align-items:center; gap:22px;
   flex-wrap:wrap;
 }
-.stat-group{
-  display:flex; flex-direction:column; gap:5px;
-  padding-left:18px; border-left:1px solid var(--line); min-width:140px;
+.dossier-block{
+  display:flex; align-items:center; gap:14px;
+  padding-right:22px; border-right:1px solid var(--line);
 }
-.stat-group:first-of-type{padding-left:0; border-left:none;}
+.dossier-block:last-of-type{padding-right:0; border-right:none;}
+.stat-group{
+  display:flex; flex-direction:column; gap:5px; min-width:140px;
+}
 .stat-group-label{
   font-family:'JetBrains Mono',monospace; font-size:0.68rem;
   letter-spacing:.1em; text-transform:uppercase; color:var(--teal);
@@ -456,30 +459,50 @@ h1{
     </div>
 
     <div class="dossier">
-      <div class="dossier-ring">
-        <svg width="64" height="64" viewBox="0 0 64 64">
-          <circle class="dossier-ring-track" cx="32" cy="32" r="27"/>
-          <circle class="dossier-ring-fill" id="ringFill" cx="32" cy="32" r="27" stroke-dasharray="170" stroke-dashoffset="170"/>
-        </svg>
-        <div class="dossier-ring-label" id="ringLabel">0%</div>
+      <div class="dossier-block">
+        <div class="dossier-ring">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle class="dossier-ring-track" cx="32" cy="32" r="27"/>
+            <circle class="dossier-ring-fill" id="ringFillTotal" cx="32" cy="32" r="27" stroke-dasharray="170" stroke-dashoffset="170"/>
+          </svg>
+          <div class="dossier-ring-label" id="ringLabelTotal">0%</div>
+        </div>
+        <div class="stat-group">
+          <div class="stat-group-label">Total</div>
+          <div class="stat-line"><strong id="statDone">0/0</strong><em>cours faits</em></div>
+          <div class="stat-line"><strong id="statPages">0</strong><em>pages restantes</em></div>
+          <div class="stat-line"><strong id="statSpecs">0/0</strong><em>spécialités</em></div>
+        </div>
       </div>
-      <div class="stat-group">
-        <div class="stat-group-label">Total</div>
-        <div class="stat-line"><strong id="statDone">0/0</strong><em>cours faits</em></div>
-        <div class="stat-line"><strong id="statPages">0</strong><em>pages restantes</em></div>
-        <div class="stat-line"><strong id="statSpecs">0/0</strong><em>spécialités</em></div>
+      <div class="dossier-block">
+        <div class="dossier-ring">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle class="dossier-ring-track" cx="32" cy="32" r="27"/>
+            <circle class="dossier-ring-fill" id="ringFillJ1" cx="32" cy="32" r="27" stroke-dasharray="170" stroke-dashoffset="170"/>
+          </svg>
+          <div class="dossier-ring-label" id="ringLabelJ1">0%</div>
+        </div>
+        <div class="stat-group">
+          <div class="stat-group-label">Jour 1</div>
+          <div class="stat-line"><strong id="statDoneJ1">0/0</strong><em>cours faits</em></div>
+          <div class="stat-line"><strong id="statPagesJ1">0</strong><em>pages restantes</em></div>
+          <div class="stat-line"><strong id="statSpecsJ1">0/0</strong><em>spécialités</em></div>
+        </div>
       </div>
-      <div class="stat-group">
-        <div class="stat-group-label">Jour 1</div>
-        <div class="stat-line"><strong id="statDoneJ1">0/0</strong><em>cours faits</em></div>
-        <div class="stat-line"><strong id="statPagesJ1">0</strong><em>pages restantes</em></div>
-        <div class="stat-line"><strong id="statSpecsJ1">0/0</strong><em>spécialités</em></div>
-      </div>
-      <div class="stat-group">
-        <div class="stat-group-label">Jour 2</div>
-        <div class="stat-line"><strong id="statDoneJ2">0/0</strong><em>cours faits</em></div>
-        <div class="stat-line"><strong id="statPagesJ2">0</strong><em>pages restantes</em></div>
-        <div class="stat-line"><strong id="statSpecsJ2">0/0</strong><em>spécialités</em></div>
+      <div class="dossier-block">
+        <div class="dossier-ring">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle class="dossier-ring-track" cx="32" cy="32" r="27"/>
+            <circle class="dossier-ring-fill" id="ringFillJ2" cx="32" cy="32" r="27" stroke-dasharray="170" stroke-dashoffset="170"/>
+          </svg>
+          <div class="dossier-ring-label" id="ringLabelJ2">0%</div>
+        </div>
+        <div class="stat-group">
+          <div class="stat-group-label">Jour 2</div>
+          <div class="stat-line"><strong id="statDoneJ2">0/0</strong><em>cours faits</em></div>
+          <div class="stat-line"><strong id="statPagesJ2">0</strong><em>pages restantes</em></div>
+          <div class="stat-line"><strong id="statSpecsJ2">0/0</strong><em>spécialités</em></div>
+        </div>
       </div>
     </div>
 
@@ -1112,12 +1135,20 @@ function render(){
   set("statPagesJ2", dayStats.J2.pagesLeft);
   set("statSpecsJ2", `${dayStats.J2.specsComplete}/${dayStats.J2.totalSpecs}`);
 
-  const pct = totals.items ? Math.round((totals.done/totals.items)*100) : 0;
-  document.getElementById("ringLabel").textContent = pct+"%";
-  const ring = document.getElementById("ringFill");
   const circumference = 2*Math.PI*27;
-  ring.setAttribute("stroke-dasharray", circumference);
-  ring.setAttribute("stroke-dashoffset", circumference - (pct/100)*circumference);
+  function drawRing(fillId, labelId, done, total){
+    const pct = total ? Math.round((done/total)*100) : 0;
+    const label = document.getElementById(labelId);
+    if(label) label.textContent = pct+"%";
+    const ring = document.getElementById(fillId);
+    if(ring){
+      ring.setAttribute("stroke-dasharray", circumference);
+      ring.setAttribute("stroke-dashoffset", circumference - (pct/100)*circumference);
+    }
+  }
+  drawRing("ringFillTotal", "ringLabelTotal", totals.done, totals.items);
+  drawRing("ringFillJ1", "ringLabelJ1", dayStats.J1.done, dayStats.J1.items);
+  drawRing("ringFillJ2", "ringLabelJ2", dayStats.J2.done, dayStats.J2.items);
 }
 
 document.querySelectorAll(".ctrl-btn[data-sort]").forEach(btn=>{
