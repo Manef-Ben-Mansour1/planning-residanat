@@ -311,7 +311,35 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
 .tab-item.done .tab-dot{background:var(--teal);}
 
 /* ---- Main ---- */
-.main{flex:1; padding:36px 44px 80px; max-width:900px;}
+.main{flex:1; padding:36px 44px 80px; max-width:900px; min-width:0;}
+
+/* ---- Stats sidebar (droite, sticky sur grand écran) ---- */
+.stats-side{
+  flex:0 0 320px;
+  padding:36px 24px 40px 0;
+  position:sticky; top:0;
+  align-self:flex-start;
+  max-height:100vh;
+  overflow-y:auto;
+}
+.stats-side .dossier{flex-direction:column; gap:14px; margin:0;}
+.stats-side .dossier-block{flex:1 1 auto; width:100%;}
+
+@media (max-width:1200px){
+  /* Pas assez d'espace : bascule en bandeau au-dessus du contenu */
+  .stats-side{
+    position:static; padding:0 44px;
+    flex:1 1 100%; width:100%;
+    max-height:none; overflow:visible;
+    order:-1; margin-top:24px;
+  }
+  .stats-side .dossier{flex-direction:row;}
+  .app{flex-wrap:wrap;}
+}
+@media (max-width:760px){
+  .stats-side{padding:0 14px; margin-top:16px;}
+  .stats-side .dossier{flex-direction:column;}
+}
 
 .header{margin-bottom:28px;}
 .eyebrow{
@@ -562,6 +590,16 @@ h1{
       <p class="subtitle">Coche chaque cours au fur et à mesure, et renseigne toi-même la date de révision prévue.</p>
     </div>
 
+    <div class="controls">
+      <span id="saveStatus" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--ink-soft);align-self:center;margin-right:auto;"></span>
+      <button class="ctrl-btn" data-filter="all-toggle" id="resetBtn">Réinitialiser</button>
+    </div>
+
+    <div id="sections"></div>
+
+    <div class="footer-note">Ta progression et tes dates sont sauvegardées automatiquement dans ce document.</div>
+  </main>
+  <aside class="stats-side">
     <div class="dossier">
       <div class="dossier-block">
         <div class="dossier-ring">
@@ -609,16 +647,7 @@ h1{
         </div>
       </div>
     </div>
-
-    <div class="controls">
-      <span id="saveStatus" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--ink-soft);align-self:center;margin-right:auto;"></span>
-      <button class="ctrl-btn" data-filter="all-toggle" id="resetBtn">Réinitialiser</button>
-    </div>
-
-    <div id="sections"></div>
-
-    <div class="footer-note">Ta progression et tes dates sont sauvegardées automatiquement dans ce document.</div>
-  </main>
+  </aside>
 </div>
 </div><!-- /viewChecklist -->
 
