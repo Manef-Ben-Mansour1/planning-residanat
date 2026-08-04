@@ -366,7 +366,7 @@ h1{
 
 .course-row{
   display:grid;
-  grid-template-columns:26px 34px 1fr 56px 46px 132px;
+  grid-template-columns:26px 34px 1fr 56px 76px 132px;
   align-items:center; gap:12px;
   padding:10px 4px; border-bottom:1px solid var(--line);
   font-size:0.88rem;
@@ -379,13 +379,21 @@ h1{
   font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--ink-soft);
   text-align:right; white-space:nowrap;
 }
-.coef-chip{
-  font-family:'JetBrains Mono',monospace; font-size:0.72rem; font-weight:600;
-  text-align:center; border-radius:5px; padding:2px 0;
+.hours-wrap{position:relative;}
+.hours-input{
+  font-family:'JetBrains Mono',monospace; font-size:0.78rem; font-weight:600;
+  width:100%; padding:5px 22px 5px 8px; border:1px solid var(--line); border-radius:6px;
+  background:var(--paper); color:var(--ink); text-align:right;
+  -moz-appearance:textfield;
 }
-.coef-low{background:var(--teal-soft); color:var(--teal);}
-.coef-mid{background:var(--amber-soft); color:var(--amber);}
-.coef-high{background:var(--rust-soft); color:var(--rust);}
+.hours-input::-webkit-outer-spin-button,
+.hours-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+.hours-input:focus{outline:none; border-color:var(--teal);}
+.hours-unit{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--ink-soft);
+  pointer-events:none;
+}
 .date-input{
   font-family:'Inter',sans-serif; font-size:0.78rem; border:1px solid var(--line);
   border-radius:6px; padding:5px 8px; color:var(--ink); background:var(--paper);
@@ -400,9 +408,9 @@ h1{
 @media (max-width:760px){
   .tabs{display:none;}
   .main{padding:24px 16px 60px;}
-  .course-row{grid-template-columns:22px 30px 1fr 44px; row-gap:6px;}
-  .pages-chip,.coef-chip{display:none;}
-  .date-input{grid-column:1 / -1; margin-left:32px; width:calc(100% - 32px);}
+  .course-row{grid-template-columns:22px 30px 1fr 60px; row-gap:6px;}
+  .pages-chip,.hours-wrap{display:none;}
+  .date-input{grid-column:1 / -1; margin-left:0; width:100%;}
 }
 </style>
 </head>
@@ -508,9 +516,7 @@ h1{
     </div>
 
     <div class="controls">
-      <button class="ctrl-btn active" data-sort="order">Ordre du programme</button>
-      <button class="ctrl-btn" data-sort="priority">Priorité (pages × coef)</button>
-      <span id="saveStatus" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--ink-soft);align-self:center;margin-left:auto;"></span>
+      <span id="saveStatus" style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--ink-soft);align-self:center;margin-right:auto;"></span>
       <button class="ctrl-btn" data-filter="all-toggle" id="resetBtn">Réinitialiser</button>
     </div>
 
@@ -822,35 +828,43 @@ function initEmptyState(){
   agendaCache = {};
   for(const item of all){
     state[item.id] = {
-      r1:{checked:false, date:""},
-      r2:{checked:false, date:""},
-      r3:{checked:false, date:""}
+      r1:{checked:false, date:"", hours:""},
+      r2:{checked:false, date:"", hours:""},
+      r3:{checked:false, date:"", hours:""}
     };
   }
 }
 
 // Migre l'ancien format {checked, date} → {r1:{...}, r2:{...}, r3:{...}}
-// Les données existantes deviennent la 1ère lecture, les autres restent vides.
+// et remplit hours à "" par défaut sur toutes les entrées existantes.
+function normalizeReading(r){
+  const empty = {checked:false, date:"", hours:""};
+  if(!r) return {...empty};
+  return {
+    checked: !!r.checked,
+    date: r.date || "",
+    hours: (r.hours !== undefined && r.hours !== null) ? String(r.hours) : ""
+  };
+}
 function normalizeItem(raw){
-  const empty = {checked:false, date:""};
-  if(!raw) return {r1:{...empty}, r2:{...empty}, r3:{...empty}};
+  if(!raw) return {r1:normalizeReading(), r2:normalizeReading(), r3:normalizeReading()};
   if("checked" in raw && !("r1" in raw)){
     return {
-      r1:{checked:!!raw.checked, date:raw.date||""},
-      r2:{...empty},
-      r3:{...empty}
+      r1:{checked:!!raw.checked, date:raw.date||"", hours:""},
+      r2:normalizeReading(),
+      r3:normalizeReading()
     };
   }
   return {
-    r1:raw.r1 ? {checked:!!raw.r1.checked, date:raw.r1.date||""} : {...empty},
-    r2:raw.r2 ? {checked:!!raw.r2.checked, date:raw.r2.date||""} : {...empty},
-    r3:raw.r3 ? {checked:!!raw.r3.checked, date:raw.r3.date||""} : {...empty}
+    r1:normalizeReading(raw.r1),
+    r2:normalizeReading(raw.r2),
+    r3:normalizeReading(raw.r3)
   };
 }
 
 // Raccourci : lit l'entrée de la lecture en cours pour un item
 function readState(id){
-  return state[id]?.["r"+currentReading] || {checked:false, date:""};
+  return state[id]?.["r"+currentReading] || {checked:false, date:"", hours:""};
 }
 
 // --- Chargement du snapshot depuis Supabase pour l'utilisateur connecté ---
@@ -1005,15 +1019,6 @@ function removeCourseFromAgenda(title, dateKey){
   }
 }
 
-function coefClass(k){
-  if(k>=1.25) return "coef-high";
-  if(k>=0.9) return "coef-mid";
-  return "coef-low";
-}
-
-let currentSort = "order";
-
-
 function render(){
   const tabsEl = document.getElementById("tabs");
   const sectionsEl = document.getElementById("sections");
@@ -1044,10 +1049,7 @@ function render(){
     tabsEl.appendChild(tabsGroup);
 
     group.sections.forEach(({sec, si})=>{
-      let items = sec.items.map((it,ii)=>({...it, id:`${si}-${ii}`}));
-      if(currentSort==="priority"){
-        items = [...items].sort((a,b)=> (b.p*b.k) - (a.p*a.k));
-      }
+      const items = sec.items.map((it,ii)=>({...it, id:`${si}-${ii}`}));
       const doneCount = items.filter(it=>readState(it.id).checked).length;
       const pagesLeftHere = items.reduce((n,it)=> n + (readState(it.id).checked ? 0 : it.p), 0);
       const isComplete = doneCount===items.length;
@@ -1091,11 +1093,15 @@ function render(){
           <span class="code">${it.c}</span>
           <span class="course-title">${it.t}</span>
           <span class="pages-chip">${it.p} p.</span>
-          <span class="coef-chip ${coefClass(it.k)}">${it.k}</span>
+          <span class="hours-wrap">
+            <input type="number" class="hours-input" min="0" step="0.5" value="${st.hours||""}" placeholder="0" />
+            <span class="hours-unit">h</span>
+          </span>
           <input type="date" class="date-input" value="${st.date||""}" />
         `;
         const chk = row.querySelector(".chk");
         const dateInp = row.querySelector(".date-input");
+        const hoursInp = row.querySelector(".hours-input");
         chk.onchange = ()=>{
           const wasDate = state[it.id][rKey].date;
           state[it.id][rKey].checked = chk.checked;
@@ -1117,6 +1123,10 @@ function render(){
           saveItem(it.id);
           if(oldDate && oldDate !== newDate) removeCourseFromAgenda(it.t, oldDate);
           if(newDate) addCourseToAgenda(it.t, newDate);
+        };
+        hoursInp.onchange = ()=>{
+          state[it.id][rKey].hours = hoursInp.value;
+          saveItem(it.id);
         };
         section.appendChild(row);
       });
@@ -1151,15 +1161,6 @@ function render(){
   drawRing("ringFillJ1", "ringLabelJ1", dayStats.J1.done, dayStats.J1.items);
   drawRing("ringFillJ2", "ringLabelJ2", dayStats.J2.done, dayStats.J2.items);
 }
-
-document.querySelectorAll(".ctrl-btn[data-sort]").forEach(btn=>{
-  btn.onclick = ()=>{
-    document.querySelectorAll(".ctrl-btn[data-sort]").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    currentSort = btn.dataset.sort;
-    render();
-  };
-});
 
 /* ---------------- Modal de confirmation ---------------- */
 const confirmModal = document.getElementById("confirmModal");
