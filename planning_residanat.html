@@ -226,35 +226,38 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
   font-family:'JetBrains Mono',monospace; font-size:0.75rem; font-weight:600; color:var(--ink-soft);
   width:22px; height:22px; display:flex; align-items:center; justify-content:center; margin-bottom:4px;
 }
-.cal-note{
-  display:none;
-  flex:1; border:none; background:transparent; resize:none; outline:none;
-  font-family:'Inter',sans-serif; font-size:0.78rem; color:var(--ink); line-height:1.35;
-  width:100%;
-}
-.cal-note::placeholder{color:#B7C0BE;}
-.cal-cell.editing .cal-note{display:block;}
-.cal-cell.editing .cal-chips{display:none;}
-
 .cal-chips{
-  flex:1; display:flex; flex-direction:column; gap:3px;
-  cursor:text; overflow-y:auto;
+  flex:1; display:flex; flex-direction:column; gap:2px;
+  overflow-y:auto; min-height:0;
 }
 .cal-chip{
   font-family:'Inter',sans-serif; font-size:0.72rem; font-weight:600;
-  padding:3px 6px; border-radius:4px; line-height:1.25;
+  padding:3px 4px 3px 6px; border-radius:4px; line-height:1.2;
   white-space:normal; word-break:break-word;
+  display:flex; align-items:flex-start; gap:4px;
 }
-.cal-chip-empty{
-  color:#B7C0BE; font-size:0.75rem; font-style:italic;
+.cal-chip-text{flex:1;}
+.cal-chip-x{
+  border:none; background:transparent; padding:0 2px;
+  font-size:1em; line-height:1; cursor:pointer;
+  color:inherit; opacity:0.55;
 }
+.cal-chip-x:hover{opacity:1;}
+.cal-input{
+  width:100%; border:none; background:transparent; outline:none;
+  font-family:'Inter',sans-serif; font-size:0.72rem; color:var(--ink);
+  padding:3px 4px; margin-top:2px;
+  border-top:1px dashed var(--line);
+}
+.cal-input::placeholder{color:#B7C0BE; font-style:italic;}
+.cal-cell.editing .cal-input{border-top-color:var(--teal); border-top-style:solid;}
 
 @media (max-width:760px){
   .agenda-wrap{padding:20px 12px 60px;}
   .cal-cell{min-height:88px; padding:4px 5px;}
   .cal-dow{font-size:0.6rem;}
-  .cal-note{font-size:0.7rem;}
-  .cal-chip{font-size:0.65rem; padding:2px 4px;}
+  .cal-input{font-size:0.7rem;}
+  .cal-chip{font-size:0.65rem; padding:2px 3px 2px 5px;}
 }
 
 
@@ -1027,33 +1030,20 @@ function parseEntries(text){
 
 /* ---------------- Suggestions de cours ---------------- */
 const suggestBox = document.getElementById("suggestBox");
-let suggestState = {items:[], active:-1, textarea:null, wordStart:0};
+let suggestState = {items:[], active:-1, input:null, cellKey:null, chipsEl:null};
 
 function hideSuggest(){
   suggestBox.classList.add("hidden");
-  suggestState = {items:[], active:-1, textarea:null, wordStart:0};
+  suggestState = {items:[], active:-1, input:null, cellKey:null, chipsEl:null};
 }
 
-// Retourne le fragment en cours de saisie (du dernier séparateur au curseur)
-function currentFragment(textarea){
-  const val = textarea.value;
-  const pos = textarea.selectionStart;
-  const before = val.slice(0, pos);
-  const m = before.match(/[^,;\/\n]*$/);
-  const raw = m ? m[0] : "";
-  const trimmed = raw.trimStart();
-  const wordStart = pos - trimmed.length;
-  return {trimmed, wordStart, cursorPos: pos};
-}
-
-function showSuggestions(textarea){
-  const {trimmed, wordStart, cursorPos} = currentFragment(textarea);
-  if(trimmed.length < 3){ hideSuggest(); return; }
-  const norm = normalize(trimmed);
+function showSuggestions(input, cellKey, chipsEl){
+  const val = (input.value || "").trim();
+  if(val.length < 3){ hideSuggest(); return; }
+  const norm = normalize(val);
   if(!norm){ hideSuggest(); return; }
 
-  // Cherche les cours dont un alias contient le fragment (matching souple UNIQUEMENT
-  // pour l'aide à la saisie ; la sync sur le texte reste stricte via findBestMatch)
+  // Matching souple pour l'aide à la saisie (alias.includes(fragment))
   const seen = new Set();
   const items = [];
   for(const item of all){
@@ -1067,9 +1057,9 @@ function showSuggestions(textarea){
   if(items.length === 0){ hideSuggest(); return; }
 
   const shown = items.slice(0, 8);
-  suggestState = {items:shown, active:0, textarea, wordStart, cursorPos};
+  suggestState = {items:shown, active:0, input, cellKey, chipsEl};
 
-  const rect = textarea.getBoundingClientRect();
+  const rect = input.getBoundingClientRect();
   const spaceBelow = window.innerHeight - rect.bottom;
   const preferAbove = spaceBelow < 200 && rect.top > 260;
   suggestBox.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 240)) + "px";
@@ -1091,29 +1081,20 @@ function showSuggestions(textarea){
 
   suggestBox.querySelectorAll(".suggest-item").forEach(el=>{
     el.addEventListener("mousedown", (e)=>{
-      e.preventDefault(); // évite le blur de la textarea
+      e.preventDefault(); // évite le blur de l'input
       insertSuggestion(parseInt(el.dataset.idx, 10));
     });
   });
 }
 
 function insertSuggestion(idx){
-  const {items, textarea, wordStart, cursorPos} = suggestState;
-  if(!textarea || idx < 0 || idx >= items.length) return;
+  const {items, input, cellKey, chipsEl} = suggestState;
+  if(!input || idx < 0 || idx >= items.length) return;
   const item = items[idx];
-  const val = textarea.value;
-  const after = val.slice(cursorPos);
-  // Ajoute un saut de ligne pour continuer à taper le prochain cours sur
-  // la ligne du dessous. Évite le doublon de \n si le texte suivant en a déjà un.
-  const suffix = (after.startsWith("\n") || after === "") ? "\n" : "\n";
-  const insertText = item.t + suffix;
-  const newText = val.slice(0, wordStart) + insertText + after;
-  textarea.value = newText;
-  const nc = wordStart + insertText.length;
-  textarea.setSelectionRange(nc, nc);
-  textarea.focus();
+  commitEntry(cellKey, item.t, chipsEl);
+  input.value = "";
+  input.focus();
   hideSuggest();
-  textarea.dispatchEvent(new Event("input"));
 }
 
 function updateSuggestActive(){
@@ -1832,57 +1813,148 @@ function renderCalendar(){
     dayNum.textContent = cellDate.getDate();
     cell.appendChild(dayNum);
 
-    const textarea = document.createElement("textarea");
-    textarea.className = "cal-note";
-    textarea.placeholder = "cours…";
-    textarea.rows = 4;
-    cell.appendChild(textarea);
-
     const chips = document.createElement("div");
     chips.className = "cal-chips";
     cell.appendChild(chips);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "cal-input";
+    input.placeholder = "+ cours…";
+    input.setAttribute("autocomplete","off");
+    cell.appendChild(input);
+
     grid.appendChild(cell);
 
-    function enterEdit(){
+    renderCellChips(chips, key);
+
+    // Cliquer sur la zone chips place le focus sur l'input pour taper directement
+    chips.addEventListener("click", (e)=>{
+      if(e.target.classList.contains("cal-chip-x")) return; // X gère lui-même
+      input.focus();
+    });
+
+    input.addEventListener("input", ()=> showSuggestions(input, key, chips));
+    input.addEventListener("focus", ()=>{
       cell.classList.add("editing");
-      textarea.focus();
-      const v = textarea.value;
-      textarea.value = "";
-      textarea.value = v; // cursor to end
-    }
-    chips.addEventListener("click", enterEdit);
-
-    const initialVal = agendaCache[key] || "";
-    textarea.value = initialVal;
-    chips.innerHTML = buildChipsHTML(initialVal, key);
-
-    let saveTimeout;
-    textarea.addEventListener("input", ()=>{
-      showSuggestions(textarea);
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(()=>{
-        const oldText = agendaCache[key] || "";
-        setAgendaNote(key, textarea.value);
-        syncFromAgendaEdit(key, oldText, textarea.value);
-      }, 400);
+      if(input.value.length >= 3) showSuggestions(input, key, chips);
     });
-    textarea.addEventListener("keyup", (e)=>{
-      // Rafraîchit les suggestions quand on déplace le curseur (flèches, click)
-      if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)) showSuggestions(textarea);
+    input.addEventListener("blur", ()=>{
+      // Petit délai pour laisser le mousedown d'une suggestion s'exécuter
+      setTimeout(()=>{
+        if(document.activeElement === input) return;
+        hideSuggest();
+        // Si texte non validé, on l'ajoute quand même comme chip (matché ou libre)
+        const raw = input.value.trim();
+        if(raw){
+          commitEntry(key, raw, chips);
+          input.value = "";
+        }
+        cell.classList.remove("editing");
+      }, 150);
     });
-    textarea.addEventListener("focus", ()=> cell.classList.add("editing"));
-    textarea.addEventListener("blur", ()=>{
-      clearTimeout(saveTimeout);
-      hideSuggest();
-      const oldText = agendaCache[key] || "";
-      const normalized = normalizeAgendaText(textarea.value);
-      textarea.value = normalized;
-      setAgendaNote(key, normalized);
-      syncFromAgendaEdit(key, oldText, normalized);
-      chips.innerHTML = buildChipsHTML(normalized, key);
-      cell.classList.remove("editing");
+    input.addEventListener("keydown", (e)=>{
+      if(e.key === "Enter"){
+        e.preventDefault();
+        if(!suggestBox.classList.contains("hidden") && suggestState.active >= 0){
+          insertSuggestion(suggestState.active);
+        } else {
+          const raw = input.value.trim();
+          if(raw){
+            commitEntry(key, raw, chips);
+            input.value = "";
+            hideSuggest();
+          }
+        }
+      }
     });
   }
+}
+
+// Ajoute une entrée (matchée ou libre) à la case agenda et rafraîchit les chips
+function commitEntry(cellKey, entryText, chipsEl){
+  const match = findBestMatch(entryText);
+  const finalText = match ? match.t : entryText;
+  const entries = parseEntries(agendaCache[cellKey]||"");
+  // Évite les doublons de cours matchés
+  if(match){
+    for(const e of entries){
+      const m = findBestMatch(e);
+      if(m && m.t === finalText) return; // déjà présent
+    }
+  }
+  entries.push(finalText);
+  const newText = entries.join("\n");
+  setAgendaNote(cellKey, newText);
+
+  // Sync : pose la date sur la prochaine lecture libre, sans cocher
+  if(match){
+    const s = state[match.id];
+    if(s){
+      let target = null;
+      if(!s.r1.date) target = "r1";
+      else if(!s.r2.date) target = "r2";
+      else if(!s.r3.date) target = "r3";
+      if(target){ s[target].date = cellKey; saveItem(match.id); render(); }
+    }
+  }
+  if(chipsEl) renderCellChips(chipsEl, cellKey);
+}
+
+// Retire l'entrée d'index idx de la case, et efface la date correspondante
+function removeEntryAt(cellKey, idx, chipsEl){
+  const entries = parseEntries(agendaCache[cellKey]||"");
+  if(idx < 0 || idx >= entries.length) return;
+  const removed = entries[idx];
+  entries.splice(idx, 1);
+  setAgendaNote(cellKey, entries.join("\n"));
+  const match = findBestMatch(removed);
+  if(match){
+    const s = state[match.id];
+    if(s){
+      for(const rk of ["r1","r2","r3"]){
+        if(s[rk].date === cellKey){ s[rk].date = ""; }
+      }
+      saveItem(match.id);
+      render();
+    }
+  }
+  if(chipsEl) renderCellChips(chipsEl, cellKey);
+}
+
+// Render (inline) les chips d'une case donnée
+function renderCellChips(chipsEl, cellKey){
+  const entries = parseEntries(agendaCache[cellKey]||"");
+  if(entries.length === 0){ chipsEl.innerHTML = ""; return; }
+  chipsEl.innerHTML = entries.map((e, i)=>{
+    const match = findBestMatch(e);
+    let style, badge = "";
+    if(match){
+      const color = specColor(match.specIdx);
+      style = `background:${hexToRgba(color,0.15)};color:${color};border-left:3px solid ${color};`;
+      const s = state[match.id];
+      if(s){
+        for(const rk of ["r1","r2","r3"]){
+          if(s[rk].date === cellKey){
+            badge = ` <span style="opacity:0.65;font-size:0.85em;font-weight:500;">${rk.toUpperCase()}</span>`;
+            break;
+          }
+        }
+      }
+    } else {
+      style = `color:var(--ink-soft);border-left:3px solid var(--line);`;
+    }
+    return `<div class="cal-chip" style="${style}">
+      <span class="cal-chip-text">${escapeHtml(e)}${badge}</span>
+      <button class="cal-chip-x" data-idx="${i}" title="Retirer">×</button>
+    </div>`;
+  }).join('');
+  chipsEl.querySelectorAll(".cal-chip-x").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      removeEntryAt(cellKey, parseInt(btn.dataset.idx,10), chipsEl);
+    });
+  });
 }
 
 // ---- Rendu coloré des cours saisis dans l'agenda ----
