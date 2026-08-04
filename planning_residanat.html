@@ -98,11 +98,23 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
 .auth-link:hover{color:var(--teal); text-decoration:underline;}
 
 @media (max-width:520px){
-  .auth-overlay{padding:16px;}
-  .auth-card{padding:32px 24px; border-radius:12px;}
-  .auth-title{font-size:1.6rem; margin-bottom:20px;}
-  .auth-field{font-size:1rem; padding:13px 14px;}
-  .auth-btn{font-size:0.95rem; padding:13px 14px;}
+  .auth-overlay{padding:12px;}
+  .auth-card{
+    padding:40px 26px; border-radius:16px;
+    max-width:none;
+  }
+  .auth-eyebrow{font-size:0.85rem; letter-spacing:.14em; margin-bottom:12px;}
+  .auth-title{font-size:2rem; margin-bottom:26px;}
+  .auth-field{
+    font-size:1.1rem; padding:16px 16px;
+    border-radius:12px; margin-bottom:14px;
+  }
+  .auth-btn{
+    font-size:1.05rem; padding:16px;
+    border-radius:12px; margin-top:10px;
+  }
+  .auth-link{font-size:0.95rem; margin:6px 4px 14px;}
+  .auth-msg{font-size:0.95rem; margin-top:18px;}
 }
 .hidden{display:none !important;}
 
