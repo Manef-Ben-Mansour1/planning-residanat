@@ -348,10 +348,14 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
 .stats-side{
   flex:0 0 320px;
   padding:36px 24px 40px 0;
-  position:sticky; top:0;
+  position:sticky; top:53px;
   align-self:flex-start;
-  max-height:100vh;
+  max-height:calc(100vh - 53px);
   overflow-y:auto;
+  /* Sur écran très large, absorbe l'espace vide à gauche et à droite
+     de la sidebar pour la centrer horizontalement dans l'espace libre. */
+  margin-left:auto;
+  margin-right:auto;
 }
 .stats-side .dossier{flex-direction:column; gap:14px; margin:0;}
 .stats-side .dossier-block{flex:1 1 auto; width:100%;}
@@ -362,7 +366,7 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
     position:static; padding:0 44px;
     flex:1 1 100%; width:100%;
     max-height:none; overflow:visible;
-    order:-1; margin-top:24px;
+    order:-1; margin:24px 0 0 0;
   }
   .stats-side .dossier{flex-direction:row;}
   .app{flex-wrap:wrap;}
