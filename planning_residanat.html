@@ -1320,7 +1320,7 @@ function render(){
             <input type="number" class="hours-input" min="0" step="0.5" value="${st.hours||""}" placeholder="0" style="${hoursStyle}" />
             <span class="hours-unit" style="${hoursUnitStyle}">h</span>
           </span>
-          <input type="text" class="date-input" value="${toDisplayDate(st.date)}" placeholder="jj/mm/aaaa" maxlength="10" inputmode="numeric" />
+          <input type="date" class="date-input" value="${st.date||""}" />
         `;
         const chk = row.querySelector(".chk");
         const dateInp = row.querySelector(".date-input");
@@ -1340,18 +1340,12 @@ function render(){
           render();
         };
         dateInp.onchange = ()=>{
-          const iso = parseUserDate(dateInp.value);
-          if(iso === null){
-            // Format invalide : on revient à la valeur précédente
-            dateInp.value = toDisplayDate(state[it.id][rKey].date);
-            return;
-          }
           const oldDate = state[it.id][rKey].date;
-          state[it.id][rKey].date = iso;
-          dateInp.value = toDisplayDate(iso);
+          const newDate = dateInp.value; // yyyy-mm-dd (ISO natif du input type=date)
+          state[it.id][rKey].date = newDate;
           saveItem(it.id);
-          if(oldDate && oldDate !== iso) removeCourseFromAgenda(it.t, oldDate);
-          if(iso) addCourseToAgenda(it.t, iso);
+          if(oldDate && oldDate !== newDate) removeCourseFromAgenda(it.t, oldDate);
+          if(newDate) addCourseToAgenda(it.t, newDate);
         };
         hoursInp.onchange = ()=>{
           state[it.id][rKey].hours = hoursInp.value;
