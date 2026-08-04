@@ -1102,13 +1102,17 @@ function insertSuggestion(idx){
   if(!textarea || idx < 0 || idx >= items.length) return;
   const item = items[idx];
   const val = textarea.value;
-  const newText = val.slice(0, wordStart) + item.t + val.slice(cursorPos);
+  const after = val.slice(cursorPos);
+  // Ajoute un saut de ligne pour continuer à taper le prochain cours sur
+  // la ligne du dessous. Évite le doublon de \n si le texte suivant en a déjà un.
+  const suffix = (after.startsWith("\n") || after === "") ? "\n" : "\n";
+  const insertText = item.t + suffix;
+  const newText = val.slice(0, wordStart) + insertText + after;
   textarea.value = newText;
-  const nc = wordStart + item.t.length;
+  const nc = wordStart + insertText.length;
   textarea.setSelectionRange(nc, nc);
   textarea.focus();
   hideSuggest();
-  // déclenche l'input event pour la sync débouncée
   textarea.dispatchEvent(new Event("input"));
 }
 
@@ -1138,16 +1142,16 @@ document.addEventListener("keydown", (e)=>{
   }
 });
 
-// Remplace chaque entrée reconnue par le titre officiel du cours.
-// Les entrées non reconnues sont conservées telles quelles (l'utilisateur
-// peut noter du texte libre à côté).
+// Remplace chaque entrée reconnue par le titre officiel du cours et met
+// UNE entrée PAR LIGNE (plus lisible dans les petites cases + prêt à
+// taper un nouveau cours en dessous).
 function normalizeAgendaText(text){
   const entries = parseEntries(text);
   if(entries.length === 0) return "";
   return entries.map(e=>{
     const m = findBestMatch(e);
     return m ? m.t : e;
-  }).join(", ");
+  }).join("\n");
 }
 
 // Sync agenda → liste : diff old vs new, ajoute pour les cours nouveaux,
