@@ -278,17 +278,18 @@ h1{
 
 /* progress dossier */
 .dossier{
-  background:var(--paper-raised); border:1px solid var(--line); border-radius:10px;
-  padding:18px 22px; margin:22px 0 30px; display:flex; align-items:center; gap:22px;
+  display:flex; gap:14px; margin:22px 0 30px;
   flex-wrap:wrap;
 }
 .dossier-block{
+  background:var(--paper-raised); border:1px solid var(--line); border-radius:10px;
+  padding:16px 20px;
   display:flex; align-items:center; gap:14px;
-  padding-right:22px; border-right:1px solid var(--line);
+  flex:1 1 240px;
+  box-shadow:0 1px 2px rgba(0,0,0,0.02);
 }
-.dossier-block:last-of-type{padding-right:0; border-right:none;}
 .stat-group{
-  display:flex; flex-direction:column; gap:5px; min-width:140px;
+  display:flex; flex-direction:column; gap:5px; min-width:130px;
 }
 .stat-group-label{
   font-family:'JetBrains Mono',monospace; font-size:0.68rem;
