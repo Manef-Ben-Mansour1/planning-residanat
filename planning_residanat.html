@@ -341,7 +341,7 @@ h1{
     <input class="auth-field" type="email" id="authEmail" placeholder="email@exemple.com" autocomplete="email" />
     <input class="auth-field" type="password" id="authPwd" placeholder="mot de passe" autocomplete="current-password" />
     <input class="auth-field hidden" type="password" id="authPwdConfirm" placeholder="confirme le mot de passe" autocomplete="new-password" />
-    <input class="auth-field hidden" type="text" id="authOtp" placeholder="code à 6 chiffres" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
+    <input class="auth-field hidden" type="text" id="authOtp" placeholder="code reçu par email" inputmode="numeric" maxlength="10" autocomplete="one-time-code" />
     <a class="auth-link" id="authForgotLink" href="#">Mot de passe oublié ?</a>
     <button class="auth-btn primary" id="authSubmit">Se connecter</button>
     <button class="auth-btn secondary" id="authToggle">Créer un compte</button>
@@ -997,7 +997,7 @@ authSubmit.onclick = async ()=>{
     const token = authOtp.value.trim();
     const pwd = authPwd.value;
     const pwdConfirm = authPwdConfirm.value;
-    if(!/^\d{6}$/.test(token)){ setAuthMsg("Entre le code à 6 chiffres reçu par email."); return; }
+    if(!/^\d{4,10}$/.test(token)){ setAuthMsg("Entre le code reçu par email (chiffres uniquement)."); return; }
     if(pwd.length < 6){ setAuthMsg("Nouveau mot de passe : 6 caractères minimum."); return; }
     if(pwd !== pwdConfirm){ setAuthMsg("Les deux mots de passe ne correspondent pas."); return; }
     authSubmit.disabled = true;
@@ -1018,7 +1018,7 @@ authSubmit.onclick = async ()=>{
   // Mode : vérif code signup
   if(authMode === "verify"){
     const token = authOtp.value.trim();
-    if(!/^\d{6}$/.test(token)){ setAuthMsg("Entre le code à 6 chiffres reçu par email."); return; }
+    if(!/^\d{4,10}$/.test(token)){ setAuthMsg("Entre le code reçu par email (chiffres uniquement)."); return; }
     authSubmit.disabled = true;
     try{
       const {error} = await sb.auth.verifyOtp({email:pendingEmail, token, type:"signup"});
