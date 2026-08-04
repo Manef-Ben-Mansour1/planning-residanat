@@ -96,6 +96,35 @@ html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-famil
 }
 .auth-link:hover{color:var(--teal); text-decoration:underline;}
 .hidden{display:none !important;}
+
+/* ---- Modal générique ---- */
+.modal-backdrop{
+  position:fixed; inset:0; z-index:200;
+  background:rgba(29,43,54,0.45);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.modal-card{
+  background:var(--paper-raised); border:1px solid var(--line); border-radius:12px;
+  padding:26px 28px; width:100%; max-width:420px;
+  box-shadow:0 10px 40px rgba(0,0,0,0.18);
+}
+.modal-title{
+  font-family:'Fraunces',serif; font-weight:600; font-size:1.2rem;
+  margin:0 0 10px;
+}
+.modal-msg{
+  font-size:0.9rem; color:var(--ink-soft); margin:0 0 20px; line-height:1.4;
+}
+.modal-actions{display:flex; gap:10px; justify-content:flex-end;}
+.modal-btn{
+  font-family:'Inter',sans-serif; font-size:0.82rem; font-weight:600;
+  padding:9px 18px; border-radius:8px; cursor:pointer; border:1px solid var(--line);
+  transition:.15s; background:var(--paper); color:var(--ink-soft);
+}
+.modal-btn:hover{border-color:var(--teal); color:var(--teal);}
+.modal-btn.danger{background:var(--rust); border-color:var(--rust); color:#fff;}
+.modal-btn.danger:hover{background:#8a3a26; border-color:#8a3a26; color:#fff;}
 .user-info{
   font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--ink-soft);
   display:flex; align-items:center; gap:10px;
@@ -347,6 +376,18 @@ h1{
     <button class="auth-btn secondary" id="authToggle">Créer un compte</button>
     <button class="auth-btn secondary hidden" id="authResend">Renvoyer le code</button>
     <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- ---------- Modal de confirmation générique ---------- -->
+<div class="modal-backdrop hidden" id="confirmModal">
+  <div class="modal-card">
+    <h3 class="modal-title" id="confirmTitle">Confirmer</h3>
+    <p class="modal-msg" id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button class="modal-btn" id="confirmCancel">Annuler</button>
+      <button class="modal-btn danger" id="confirmOk">Confirmer</button>
+    </div>
   </div>
 </div>
 
@@ -839,8 +880,49 @@ document.querySelectorAll(".ctrl-btn[data-sort]").forEach(btn=>{
   };
 });
 
-document.getElementById("resetBtn").onclick = ()=>{
-  if(!confirm("Réinitialiser toute ta progression et tes dates ?")) return;
+/* ---------------- Modal de confirmation ---------------- */
+const confirmModal = document.getElementById("confirmModal");
+const confirmTitle = document.getElementById("confirmTitle");
+const confirmMsg = document.getElementById("confirmMsg");
+const confirmOk = document.getElementById("confirmOk");
+const confirmCancel = document.getElementById("confirmCancel");
+
+function openConfirm({title="Confirmer", message="", okText="Confirmer", cancelText="Annuler", danger=true}={}){
+  return new Promise(resolve=>{
+    confirmTitle.textContent = title;
+    confirmMsg.textContent = message;
+    confirmOk.textContent = okText;
+    confirmCancel.textContent = cancelText;
+    confirmOk.classList.toggle("danger", danger);
+    confirmModal.classList.remove("hidden");
+
+    const cleanup = ()=>{
+      confirmModal.classList.add("hidden");
+      confirmOk.onclick = null;
+      confirmCancel.onclick = null;
+      confirmModal.onclick = null;
+      document.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e)=>{
+      if(e.key === "Escape"){ cleanup(); resolve(false); }
+      else if(e.key === "Enter"){ cleanup(); resolve(true); }
+    };
+    confirmOk.onclick = ()=>{ cleanup(); resolve(true); };
+    confirmCancel.onclick = ()=>{ cleanup(); resolve(false); };
+    confirmModal.onclick = (e)=>{ if(e.target === confirmModal){ cleanup(); resolve(false); } };
+    document.addEventListener("keydown", onKey);
+    setTimeout(()=> confirmCancel.focus(), 50);
+  });
+}
+
+document.getElementById("resetBtn").onclick = async ()=>{
+  const ok = await openConfirm({
+    title:"Réinitialiser ta progression ?",
+    message:"Toutes tes cases cochées et dates de révision seront effacées. Cette action est irréversible.",
+    okText:"Tout réinitialiser",
+    cancelText:"Annuler"
+  });
+  if(!ok) return;
   for(const item of all){
     state[item.id] = {checked:false, date:""};
     saveItem(item.id);
