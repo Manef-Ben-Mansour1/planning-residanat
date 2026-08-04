@@ -795,31 +795,98 @@ function saveItem(id){
 }
 
 // Détecte les cours mentionnés dans un texte libre (agenda) et les coche
-function autoCheckFromText(text){
-  if(!text || !text.trim()) return;
-  const blob = " " + normalize(text) + " ";
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function parseEntries(text){
+  return (text||"").split(/[\n,;\/]+/).map(s=>s.trim()).filter(Boolean);
+}
+
+// Sync agenda → liste : diff old vs new, ajoute pour les cours nouveaux,
+// décoche pour les cours retirés (uniquement la lecture dont date == dateKey).
+function syncFromAgendaEdit(dateKey, oldText, newText){
+  const oldSet = new Set();
+  for(const e of parseEntries(oldText)){
+    const it = findBestMatch(e);
+    if(it) oldSet.add(it.id);
+  }
+  const newSet = new Set();
+  for(const e of parseEntries(newText)){
+    const it = findBestMatch(e);
+    if(it) newSet.add(it.id);
+  }
   let changed = false;
-  for(const item of all){
-    const s = state[item.id];
+
+  // Ajouts : coche la prochaine lecture non faite + date = dateKey (si vide)
+  for(const id of newSet){
+    if(oldSet.has(id)) continue;
+    const s = state[id];
     if(!s) continue;
-    // Détermine la prochaine lecture à cocher automatiquement (1 → 2 → 3)
     let target = null;
     if(!s.r1.checked) target = "r1";
     else if(!s.r2.checked) target = "r2";
     else if(!s.r3.checked) target = "r3";
     if(!target) continue;
+    s[target].checked = true;
+    if(dateKey && !s[target].date) s[target].date = dateKey;
+    saveItem(id);
+    changed = true;
+  }
 
-    for(const alias of item.aliases){
-      if(alias.length < 2) continue;
-      if(blob.includes(" "+alias+" ")){
-        s[target].checked = true;
-        saveItem(item.id);
-        changed = true;
-        break;
+  // Suppressions : décoche uniquement les lectures dont la date == dateKey
+  for(const id of oldSet){
+    if(newSet.has(id)) continue;
+    const s = state[id];
+    if(!s) continue;
+    for(const rk of ["r1","r2","r3"]){
+      if(s[rk].date === dateKey){
+        s[rk].checked = false;
+        s[rk].date = "";
       }
     }
+    saveItem(id);
+    changed = true;
   }
+
   if(changed) render();
+}
+
+// Ajoute le titre d'un cours à la case agenda du jour donné (sans duplicata).
+function addCourseToAgenda(title, dateKey){
+  if(!title || !dateKey) return;
+  const existing = agendaCache[dateKey] || "";
+  // Détection par entry (pour éviter les faux positifs sur substring)
+  for(const e of parseEntries(existing)){
+    const it = findBestMatch(e);
+    if(it && it.t === title) return; // déjà présent
+  }
+  const sep = existing.trim() ? ", " : "";
+  agendaCache[dateKey] = (existing.trim() ? existing.trim() : "") + sep + title;
+  scheduleCloudSave();
+  if(document.getElementById("viewAgenda").classList.contains("active")){
+    renderCalendar();
+  }
+}
+
+// Retire le titre d'un cours de la case agenda du jour donné.
+function removeCourseFromAgenda(title, dateKey){
+  if(!title || !dateKey) return;
+  const existing = agendaCache[dateKey] || "";
+  if(!existing) return;
+  const entries = parseEntries(existing);
+  const kept = entries.filter(e=>{
+    const it = findBestMatch(e);
+    return !(it && it.t === title);
+  });
+  if(kept.length === entries.length) return;
+  const nv = kept.join(", ");
+  if(nv){ agendaCache[dateKey] = nv; }
+  else { delete agendaCache[dateKey]; }
+  scheduleCloudSave();
+  if(document.getElementById("viewAgenda").classList.contains("active")){
+    renderCalendar();
+  }
 }
 
 function coefClass(k){
@@ -887,14 +954,26 @@ function render(){
       const chk = row.querySelector(".chk");
       const dateInp = row.querySelector(".date-input");
       chk.onchange = ()=>{
+        const wasDate = state[it.id][rKey].date;
         state[it.id][rKey].checked = chk.checked;
+        if(chk.checked){
+          if(!state[it.id][rKey].date) state[it.id][rKey].date = todayISO();
+          addCourseToAgenda(it.t, state[it.id][rKey].date);
+        } else {
+          if(wasDate) removeCourseFromAgenda(it.t, wasDate);
+          state[it.id][rKey].date = "";
+        }
         row.classList.toggle("checked", chk.checked);
         saveItem(it.id);
         render();
       };
       dateInp.onchange = ()=>{
-        state[it.id][rKey].date = dateInp.value;
+        const oldDate = state[it.id][rKey].date;
+        const newDate = dateInp.value;
+        state[it.id][rKey].date = newDate;
         saveItem(it.id);
+        if(oldDate && oldDate !== newDate) removeCourseFromAgenda(it.t, oldDate);
+        if(newDate) addCourseToAgenda(it.t, newDate);
       };
       section.appendChild(row);
     });
@@ -1384,25 +1463,26 @@ function renderCalendar(){
     }
     chips.addEventListener("click", enterEdit);
 
-    // La valeur est déjà en cache grâce au préchargement ci-dessus : lecture synchrone, pas de risque de course.
     const initialVal = agendaCache[key] || "";
     textarea.value = initialVal;
-    chips.innerHTML = buildChipsHTML(initialVal);
+    chips.innerHTML = buildChipsHTML(initialVal, key);
 
     let saveTimeout;
     textarea.addEventListener("input", ()=>{
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(()=>{
+        const oldText = agendaCache[key] || "";
         setAgendaNote(key, textarea.value);
-        autoCheckFromText(textarea.value);
+        syncFromAgendaEdit(key, oldText, textarea.value);
       }, 400);
     });
     textarea.addEventListener("focus", ()=> cell.classList.add("editing"));
     textarea.addEventListener("blur", ()=>{
       clearTimeout(saveTimeout);
+      const oldText = agendaCache[key] || "";
       setAgendaNote(key, textarea.value);
-      autoCheckFromText(textarea.value);
-      chips.innerHTML = buildChipsHTML(textarea.value);
+      syncFromAgendaEdit(key, oldText, textarea.value);
+      chips.innerHTML = buildChipsHTML(textarea.value, key);
       cell.classList.remove("editing");
     });
   }
@@ -1438,19 +1518,31 @@ function findBestMatch(entryText){
   }
   return null;
 }
-function buildChipsHTML(text){
+function buildChipsHTML(text, cellDateKey){
   const entries = (text||"").split(/[\n,;\/]+/).map(s=>s.trim()).filter(Boolean);
   if(entries.length===0) return `<span class="cal-chip-empty">cours…</span>`;
   return entries.map(e=>{
     const match = findBestMatch(e);
-    let style;
+    let style, badge = "";
     if(match){
       const color = specColor(match.specIdx);
       style = `background:${hexToRgba(color,0.15)};color:${color};border-left:3px solid ${color};`;
+      // Cherche la lecture dont la date correspond à celle de la case
+      if(cellDateKey){
+        const s = state[match.id];
+        if(s){
+          for(const rk of ["r1","r2","r3"]){
+            if(s[rk].date === cellDateKey){
+              badge = ` <span style="opacity:0.65;font-size:0.85em;font-weight:500;">${rk.toUpperCase()}</span>`;
+              break;
+            }
+          }
+        }
+      }
     } else {
       style = `color:var(--ink-soft);border-left:3px solid var(--line);`;
     }
-    return `<div class="cal-chip" style="${style}">${escapeHtml(e)}</div>`;
+    return `<div class="cal-chip" style="${style}">${escapeHtml(e)}${badge}</div>`;
   }).join('');
 }
 </script>
